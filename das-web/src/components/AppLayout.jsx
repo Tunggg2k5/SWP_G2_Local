@@ -3,8 +3,6 @@ import {
   Bell,
   CalendarDays,
   CalendarPlus,
-  Camera,
-  ChevronRight,
   ClipboardCheck,
   ClipboardPenLine,
   ClipboardList,
@@ -14,26 +12,25 @@ import {
   Home,
   Info,
   LockKeyhole,
-  LogOut,
   PhoneCall,
-  Save,
   Search,
-  Settings,
   Settings2,
   ShieldCheck,
   Star,
   Stethoscope,
-  UserPen,
-  UsersRound,
-  X
+  UsersRound
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import Feedback from "../components/Feedback.jsx";
 import { useAuth } from "../redux/AuthContext.jsx";
 import { api, getErrorMessage } from "../utils/api.js";
-import { canUsePublicLookup, isClinicalRole, roleLabels } from "../utils/roles.js";
+import { canUsePublicLookup, isClinicalRole } from "../utils/roles.js";
 import { firstError, validateName, validatePassword, validatePhone } from "../utils/validation.js";
+import ChangePatientPassword from "./user/ChangePatientPassword.jsx";
+import EditPatientProfile from "./user/EditPatientProfile.jsx";
+import NotificationPanel from "./user/NotificationPanel.jsx";
+import ProfileDropdown from "./user/ProfileDropdown.jsx";
 
 const receptionistTabs = [
   { id: "appointments", label: "Lịch hẹn", icon: ClipboardList },
@@ -67,13 +64,6 @@ const nurseTabs = [
   { id: "treatment", label: "Cập nhật điều trị", icon: ClipboardPenLine },
   { id: "rooms", label: "Phòng khám", icon: DoorOpen },
   { id: "records", label: "Lịch sử điều trị", icon: FileText }
-];
-
-const genderOptions = [
-  { value: "unknown", label: "Chưa chọn" },
-  { value: "male", label: "Nam" },
-  { value: "female", label: "Nữ" },
-  { value: "other", label: "Other" }
 ];
 
 function navForRole(role) {
@@ -332,69 +322,26 @@ export default function AppLayout() {
         </div>
 
         {showNotifications && (
-          <div className="notification-popover" ref={notificationPopoverRef}>
-            <div className="notification-popover-head">
-              <div>
-                <p className="eyebrow">Hoạt động mới</p>
-                <strong>Thông báo hệ thống</strong>
-              </div>
-              <button className="icon-button" onClick={() => setShowNotifications(false)} title="Đóng">
-                <X size={18} />
-              </button>
-            </div>
-            <div className="notification-popover-list">
-              {notifications.length ? (
-                notifications.map((item) => (
-                  <button
-                    className={`notification-card ${item.isRead ? "read" : ""}`}
-                    key={item._id}
-                    onClick={() => markNotificationRead(item)}
-                  >
-                    <span className="notification-avatar">{userInitial}</span>
-                    <span>
-                      <strong>{item.title}</strong>
-                      <small>{item.message}</small>
-                      <em>{new Date(item.createdAt).toLocaleString("vi-VN")}</em>
-                    </span>
-                  </button>
-                ))
-              ) : (
-                <div className="notification-empty">Chưa có thông báo mới.</div>
-              )}
-            </div>
-          </div>
+          <NotificationPanel
+            notifications={notifications}
+            onClose={() => setShowNotifications(false)}
+            onMarkRead={markNotificationRead}
+            popoverRef={notificationPopoverRef}
+            userInitial={userInitial}
+          />
         )}
 
         {showAccountMenu && user && (
-          <div className="account-popover" ref={accountPopoverRef}>
-            <div className="account-profile-card">
-              <span className="account-avatar">
-                {user.avatarUrl ? <img src={user.avatarUrl} alt={user.fullName || "Avatar"} /> : userInitial}
-              </span>
-              <strong>{user.fullName}</strong>
-              <small>{roleLabels[user.role] || user.role}</small>
-            </div>
-            <button onClick={() => { setProfileOpen(true); setShowAccountMenu(false); }}>
-              <UserPen size={19} />
-              <span>Thay đổi thông tin cá nhân</span>
-              <ChevronRight size={18} />
-            </button>
-            <button onClick={() => fileInputRef.current?.click()}>
-              <Camera size={19} />
-              <span>Đổi avatar từ thư viện</span>
-              <ChevronRight size={18} />
-            </button>
-            <button onClick={() => { setPasswordOpen(true); setShowAccountMenu(false); }}>
-              <LockKeyhole size={19} />
-              <span>Đổi mật khẩu</span>
-              <ChevronRight size={18} />
-            </button>
-            <button onClick={handleLogout}>
-              <LogOut size={19} />
-              <span>Đăng xuất</span>
-            </button>
-            <input ref={fileInputRef} type="file" accept="image/*" hidden onChange={uploadAvatar} />
-          </div>
+          <ProfileDropdown
+            accountPopoverRef={accountPopoverRef}
+            fileInputRef={fileInputRef}
+            onChangePassword={() => { setPasswordOpen(true); setShowAccountMenu(false); }}
+            onEditProfile={() => { setProfileOpen(true); setShowAccountMenu(false); }}
+            onLogout={handleLogout}
+            onUploadAvatar={uploadAvatar}
+            user={user}
+            userInitial={userInitial}
+          />
         )}
       </header>
 
@@ -403,88 +350,21 @@ export default function AppLayout() {
       </main>
 
       {profileOpen && (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" onMouseDown={(event) => event.currentTarget === event.target && setProfileOpen(false)}>
-          <form className="account-modal panel" onSubmit={saveProfile}>
-            <div className="section-title">
-              <Settings size={20} />
-              <h2>Thông tin cá nhân</h2>
-            </div>
-            <label className="field">
-              <span>Họ tên</span>
-              <input value={profileForm.fullName} onChange={(event) => setProfileForm({ ...profileForm, fullName: event.target.value })} required />
-            </label>
-            <label className="field">
-              <span>Số điện thoại</span>
-              <input type="tel" value={profileForm.phone} onChange={(event) => setProfileForm({ ...profileForm, phone: event.target.value })} required />
-            </label>
-            <div className="form-grid account-form-grid">
-              <label className="field">
-                <span>Giới tính</span>
-                <select value={profileForm.gender} onChange={(event) => setProfileForm({ ...profileForm, gender: event.target.value })}>
-                  {genderOptions.map((option) => (
-                    <option value={option.value} key={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="field">
-                <span>Địa chỉ</span>
-                <input value={profileForm.address} onChange={(event) => setProfileForm({ ...profileForm, address: event.target.value })} maxLength={255} />
-              </label>
-            </div>
-            <label className="field">
-              <span>Ghi chú hồ sơ</span>
-              <textarea value={profileForm.bio} onChange={(event) => setProfileForm({ ...profileForm, bio: event.target.value })} rows="3" maxLength={1000} />
-            </label>
-            <div className="row-actions">
-              <button type="button" className="button ghost" onClick={() => setProfileOpen(false)}>
-                Hủy
-              </button>
-              <button className="button primary">
-                <Save size={17} />
-                Lưu
-              </button>
-            </div>
-          </form>
-        </div>
+        <EditPatientProfile
+          form={profileForm}
+          onCancel={() => setProfileOpen(false)}
+          onChange={setProfileForm}
+          onSubmit={saveProfile}
+        />
       )}
 
       {passwordOpen && (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" onMouseDown={(event) => event.currentTarget === event.target && setPasswordOpen(false)}>
-          <form className="account-modal panel" onSubmit={changePassword}>
-            <div className="section-title">
-              <LockKeyhole size={20} />
-              <h2>Đổi mật khẩu</h2>
-            </div>
-            <label className="field">
-              <span>Mật khẩu hiện tại</span>
-              <input
-                type="password"
-                value={passwordForm.currentPassword}
-                onChange={(event) => setPasswordForm({ ...passwordForm, currentPassword: event.target.value })}
-                required
-              />
-            </label>
-            <label className="field">
-              <span>Mật khẩu mới</span>
-              <input
-                type="password"
-                value={passwordForm.newPassword}
-                onChange={(event) => setPasswordForm({ ...passwordForm, newPassword: event.target.value })}
-                required
-                minLength={8}
-                maxLength={72}
-              />
-            </label>
-            <div className="row-actions">
-              <button type="button" className="button ghost" onClick={() => setPasswordOpen(false)}>
-                Hủy
-              </button>
-              <button className="button primary">Đổi mật khẩu</button>
-            </div>
-          </form>
-        </div>
+        <ChangePatientPassword
+          form={passwordForm}
+          onCancel={() => setPasswordOpen(false)}
+          onChange={setPasswordForm}
+          onSubmit={changePassword}
+        />
       )}
     </div>
   );

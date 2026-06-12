@@ -53,6 +53,7 @@ export default function AppRoutes() {
         <Route path="/booking" element={<PatientBookingRoute />} />
         <Route path="/login" element={<AuthPage mode="login" />} />
         <Route path="/register" element={<AuthPage mode="register" />} />
+        <Route path="/forgot-password" element={<AuthPage mode="forgot" />} />
         <Route
           path="/profile"
           element={

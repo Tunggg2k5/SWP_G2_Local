@@ -49,7 +49,13 @@ export default function AdminDashboard() {
   const [schedulesLoaded, setSchedulesLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [report, setReport] = useState(null);
+  const [revenueReport, setRevenueReport] = useState(null);
+  const [patientStatistics, setPatientStatistics] = useState(null);
   const [reviews, setReviews] = useState([]);
+  const [reportFilters, setReportFilters] = useState({
+    startDate: todayInput().slice(0, 8) + "01",
+    endDate: todayInput()
+  });
   const [serviceForm, setServiceForm] = useState({
     name: "",
     description: "",
@@ -62,8 +68,13 @@ export default function AdminDashboard() {
     fullName: "",
     email: "",
     phone: "",
-    role: "patient",
-    specialty: ""
+    role: "patient"
+  });
+  const [roomForm, setRoomForm] = useState({
+    name: "",
+    description: "",
+    assignedDentist: "",
+    status: "available"
   });
   const [workingHourForm, setWorkingHourForm] = useState({
     dayOfWeek: 1,
@@ -186,8 +197,27 @@ export default function AdminDashboard() {
         ...userForm,
         password: "Password123!"
       });
-      setUserForm({ fullName: "", email: "", phone: "", role: "patient", specialty: "" });
+      setUserForm({ fullName: "", email: "", phone: "", role: "patient" });
       setMessage("Đã tạo tài khoản. Mật khẩu mặc định: Password123!");
+      load();
+    } catch (err) {
+      setError(getErrorMessage(err));
+    }
+  }
+
+  async function updateServiceActive(service, isActive) {
+    const actionText = isActive ? "khôi phục" : "ẩn";
+    if (!window.confirm(`Xác nhận ${actionText} dịch vụ ${service.name}?`)) return;
+
+    try {
+      setError("");
+      setMessage("");
+      if (isActive) {
+        await api.patch(`/admin/services/${service._id}`, { isActive: true });
+      } else {
+        await api.delete(`/admin/services/${service._id}`);
+      }
+      setMessage(isActive ? "Đã khôi phục dịch vụ." : "Đã ẩn dịch vụ.");
       load();
     } catch (err) {
       setError(getErrorMessage(err));
@@ -225,6 +255,29 @@ export default function AdminDashboard() {
       setError("");
       setMessage("");
       await api.patch(`/admin/rooms/${roomId}`, { status });
+      load();
+    } catch (err) {
+      setError(getErrorMessage(err));
+    }
+  }
+
+  async function createRoom(event) {
+    event.preventDefault();
+    const validationError = firstError(validateName(roomForm.name, "Tên phòng"), validateNote(roomForm.description));
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+
+    try {
+      setError("");
+      setMessage("");
+      await api.post("/admin/rooms", {
+        ...roomForm,
+        assignedDentist: roomForm.assignedDentist || undefined
+      });
+      setRoomForm({ name: "", description: "", assignedDentist: "", status: "available" });
+      setMessage("Đã tạo phòng khám.");
       load();
     } catch (err) {
       setError(getErrorMessage(err));
@@ -318,7 +371,32 @@ export default function AdminDashboard() {
     }
   }
 
+  async function loadRevenueReport() {
+    try {
+      setError("");
+      setMessage("");
+      const res = await api.get("/admin/reports/revenue", { params: reportFilters });
+      setRevenueReport(res.data);
+      setMessage("Đã tải báo cáo doanh thu.");
+    } catch (err) {
+      setError(getErrorMessage(err));
+    }
+  }
+
+  async function loadPatientStatistics() {
+    try {
+      setError("");
+      setMessage("");
+      const res = await api.get("/admin/reports/patient-statistics", { params: reportFilters });
+      setPatientStatistics(res.data);
+      setMessage("Đã tải thống kê bệnh nhân.");
+    } catch (err) {
+      setError(getErrorMessage(err));
+    }
+  }
+
   const assignableUsers = users.filter((user) => staffRoles.includes(user.role));
+  const dentistUsers = users.filter((user) => user.role === "dentist");
 
   return (
     <div className="page-grid">
@@ -336,6 +414,8 @@ export default function AdminDashboard() {
               <Metric icon={UsersRound} label="Bệnh nhân" value={stats?.patientCount || 0} />
               <Metric icon={ShieldCheck} label="Vắng mặt" value={stats?.noShowCount || 0} />
               <Metric icon={Settings2} label="Đánh giá" value={Number(stats?.review?.average || 0).toFixed(1)} />
+              <Metric icon={UsersRound} label="Bệnh nhân mới" value={stats?.newPatientCount || 0} />
+              <Metric icon={UsersRound} label="Quay lại" value={stats?.returningPatientCount || 0} />
             </section>
           )}
 
@@ -356,6 +436,25 @@ export default function AdminDashboard() {
                 </article>
               ))}
             </div>
+            )}
+          </section>
+
+          <section className="panel">
+            <div className="section-title">
+              <Settings2 size={20} />
+              <h2>Dịch vụ được sử dụng nhiều</h2>
+            </div>
+            {stats?.serviceUsage?.length ? (
+              <div className="mini-list">
+                {stats.serviceUsage.map((item) => (
+                  <div className="mini-row" key={item._id || item.serviceName}>
+                    <span>{item.serviceName || "Dịch vụ"}</span>
+                    <strong>{item.count}</strong>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <EmptyState title="Chưa có dữ liệu dịch vụ" text="Dữ liệu sẽ xuất hiện khi có lịch hẹn." />
             )}
           </section>
         </>
@@ -390,10 +489,6 @@ export default function AdminDashboard() {
                   <option value="nurse">Y tá</option>
                   <option value="admin">Quản trị viên</option>
                 </select>
-              </label>
-              <label className="field wide">
-                <span>Chuyên môn</span>
-                <input value={userForm.specialty} onChange={(e) => setUserForm({ ...userForm, specialty: e.target.value })} />
               </label>
               <button className="button secondary">Tạo tài khoản</button>
             </form>
@@ -513,6 +608,14 @@ export default function AdminDashboard() {
                   <span>{service.name}</span>
                   <span>{service.durationMinutes} phút</span>
                   <span>{formatMoney(service.price)}</span>
+                  <StatusBadge value={service.isActive ? "active" : "inactive"} />
+                  <button
+                    className={`button small ${service.isActive ? "danger" : "secondary"}`}
+                    type="button"
+                    onClick={() => updateServiceActive(service, !service.isActive)}
+                  >
+                    {service.isActive ? "Ẩn" : "Khôi phục"}
+                  </button>
                 </div>
               ))}
             </div>
@@ -522,25 +625,65 @@ export default function AdminDashboard() {
       )}
 
       {activeFeature === "rooms" && (
-        <section className="panel">
-          <div className="section-title">
-            <DoorOpen size={20} />
-            <h2>Phòng khám</h2>
-          </div>
-          <div className="mini-list">
-            {loading ? (
-              <EmptyState title="Đang tải phòng khám" text="Hệ thống đang lấy dữ liệu mới nhất." />
-            ) : rooms.map((room) => (
-              <div className="mini-row" key={room._id}>
-                <span>{room.name}</span>
-                <StatusBadge value={room.status} />
-                <button className="button small" onClick={() => updateRoom(room._id, room.status === "maintenance" ? "available" : "maintenance")}>
-                  {room.status === "maintenance" ? "Mở" : "Bảo trì"}
-                </button>
-              </div>
-            ))}
-          </div>
-        </section>
+        <>
+          <section className="panel">
+            <div className="section-title">
+              <DoorOpen size={20} />
+              <h2>Tạo phòng khám</h2>
+            </div>
+            <form className="form-grid" onSubmit={createRoom}>
+              <label className="field">
+                <span>Tên phòng</span>
+                <input value={roomForm.name} onChange={(event) => setRoomForm({ ...roomForm, name: event.target.value })} required />
+              </label>
+              <label className="field">
+                <span>Bác sĩ phụ trách</span>
+                <select value={roomForm.assignedDentist} onChange={(event) => setRoomForm({ ...roomForm, assignedDentist: event.target.value })}>
+                  <option value="">Chưa gán</option>
+                  {dentistUsers.map((dentist) => (
+                    <option key={dentist._id} value={dentist._id}>
+                      {dentist.fullName}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>Trạng thái</span>
+                <select value={roomForm.status} onChange={(event) => setRoomForm({ ...roomForm, status: event.target.value })}>
+                  <option value="available">Sẵn sàng</option>
+                  <option value="maintenance">Bảo trì</option>
+                  <option value="unavailable">Tạm ngưng</option>
+                </select>
+              </label>
+              <label className="field wide">
+                <span>Mô tả</span>
+                <textarea value={roomForm.description} onChange={(event) => setRoomForm({ ...roomForm, description: event.target.value })} rows="3" />
+              </label>
+              <button className="button primary">Thêm phòng</button>
+            </form>
+          </section>
+
+          <section className="panel">
+            <div className="section-title">
+              <DoorOpen size={20} />
+              <h2>Phòng khám</h2>
+            </div>
+            <div className="mini-list">
+              {loading ? (
+                <EmptyState title="Đang tải phòng khám" text="Hệ thống đang lấy dữ liệu mới nhất." />
+              ) : rooms.map((room) => (
+                <div className="mini-row" key={room._id}>
+                  <span>{room.name}</span>
+                  <span>{room.assignedDentist?.fullName || "Chưa gán bác sĩ"}</span>
+                  <StatusBadge value={room.status} />
+                  <button className="button small" onClick={() => updateRoom(room._id, room.status === "maintenance" ? "available" : "maintenance")}>
+                    {room.status === "maintenance" ? "Mở" : "Bảo trì"}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </section>
+        </>
       )}
 
       {activeFeature === "workingHours" && (
@@ -790,6 +933,59 @@ export default function AdminDashboard() {
             <Metric icon={ShieldCheck} label="Vắng mặt" value={stats?.noShowCount || 0} />
             <Metric icon={Settings2} label="Đánh giá TB" value={Number(stats?.review?.average || 0).toFixed(1)} />
           </section>
+
+          <section className="panel">
+            <div className="section-title">
+              <BarChart3 size={20} />
+              <h2>Bộ lọc báo cáo</h2>
+            </div>
+            <div className="form-grid">
+              <label className="field">
+                <span>Từ ngày</span>
+                <input type="date" value={reportFilters.startDate} onChange={(event) => setReportFilters({ ...reportFilters, startDate: event.target.value })} />
+              </label>
+              <label className="field">
+                <span>Đến ngày</span>
+                <input type="date" value={reportFilters.endDate} onChange={(event) => setReportFilters({ ...reportFilters, endDate: event.target.value })} />
+              </label>
+              <button className="button primary" type="button" onClick={loadRevenueReport}>
+                Xem doanh thu
+              </button>
+              <button className="button secondary" type="button" onClick={loadPatientStatistics}>
+                Xem bệnh nhân
+              </button>
+            </div>
+          </section>
+
+          {(revenueReport || patientStatistics) && (
+            <section className="panel">
+              <div className="section-title">
+                <Download size={20} />
+                <h2>Kết quả báo cáo</h2>
+              </div>
+              <div className="metrics-grid compact-grid">
+                {revenueReport?.summary?.map((item) => (
+                  <Metric icon={BarChart3} label={`Hóa đơn ${item._id}`} value={`${formatMoney(item.total || 0)} / ${item.count}`} key={item._id} />
+                ))}
+                {patientStatistics && (
+                  <>
+                    <Metric icon={UsersRound} label="Bệnh nhân mới" value={patientStatistics.newPatients || 0} />
+                    <Metric icon={UsersRound} label="Bệnh nhân quay lại" value={patientStatistics.returningPatients || 0} />
+                  </>
+                )}
+              </div>
+              {patientStatistics?.serviceUsage?.length ? (
+                <div className="mini-list">
+                  {patientStatistics.serviceUsage.map((item) => (
+                    <div className="mini-row" key={item._id || item.serviceName}>
+                      <span>{item.serviceName || "Dịch vụ"}</span>
+                      <strong>{item.count}</strong>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </section>
+          )}
 
           <section className="panel">
             <div className="section-title">

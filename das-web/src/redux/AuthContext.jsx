@@ -39,6 +39,9 @@ export function AuthProvider({ children }) {
   }
 
   function logout() {
+    if (localStorage.getItem("das_token")) {
+      api.post("/auth/logout").catch(() => {});
+    }
     localStorage.removeItem("das_token");
     localStorage.removeItem("das_user");
     setUser(null);

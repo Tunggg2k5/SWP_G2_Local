@@ -107,7 +107,7 @@ export default function ReceptionistDashboard() {
     const patientError =
       accountMode === "existing"
         ? requireValue(booking.patientId, "Bệnh nhân")
-        : firstError(validateName(newPatient.fullName), validatePhone(newPatient.phone), requireValue(newPatient.gender, "Gender"));
+        : firstError(validateName(newPatient.fullName), validatePhone(newPatient.phone), requireValue(newPatient.gender, "Giới tính"));
     const validationError = firstError(commonError, patientError);
 
     if (validationError) {
@@ -192,6 +192,42 @@ export default function ReceptionistDashboard() {
       setMessage("Đã cập nhật bệnh nhân vào Lịch khám theo thứ tự.");
       setActiveFeature("schedule");
       navigate("/dashboard?tab=schedule", { replace: true });
+    }
+  }
+
+  async function markNoShow(appointment) {
+    if (!window.confirm("Xac nhan danh dau vang mat?")) return;
+
+    try {
+      await api.patch(`/appointments/${appointment._id}/no-show`, { note: "Le tan danh dau benh nhan vang mat." });
+      setMessage("Da danh dau benh nhan vang mat.");
+      load();
+    } catch (err) {
+      setError(getErrorMessage(err));
+    }
+  }
+
+  async function generateInvoice(appointment) {
+    if (!window.confirm("Tao hoa don cho lich hen nay?")) return;
+
+    try {
+      await api.post(`/appointments/${appointment._id}/invoice`);
+      setMessage("Da tao hoa don.");
+      load();
+    } catch (err) {
+      setError(getErrorMessage(err));
+    }
+  }
+
+  async function processPayment(appointment) {
+    if (!window.confirm("Xac nhan da thu tien cho lich hen nay?")) return;
+
+    try {
+      await api.patch(`/appointments/${appointment._id}/payment`, { paymentMethod: "cash" });
+      setMessage("Da ghi nhan thanh toan.");
+      load();
+    } catch (err) {
+      setError(getErrorMessage(err));
     }
   }
 
@@ -320,19 +356,14 @@ export default function ReceptionistDashboard() {
   });
 
   const dentistColumns = useMemo(() => {
-    const roomDentists = rooms.map((room) => room.assignedDentist).filter(Boolean);
-    const appointmentDentists = clinicalQueueAppointments.map((appointment) => appointment.dentist).filter(Boolean);
-    const merged = Array.from(new Map([...roomDentists, ...appointmentDentists].map((dentist) => [dentist._id, dentist])).values()).slice(0, 3);
+    const roomDentists = rooms
+      .filter((room) => room.assignedDentist?._id)
+      .map((room) => ({ ...room.assignedDentist, roomName: room.name }));
+    const appointmentDentists = clinicalQueueAppointments
+      .filter((appointment) => appointment.dentist?._id)
+      .map((appointment) => ({ ...appointment.dentist, roomName: appointment.room?.name }));
 
-    while (merged.length < 3) {
-      merged.push({
-        _id: `fixed-dentist-${merged.length + 1}`,
-        fullName: `Bác sĩ ${merged.length + 1}`,
-        specialty: "Bác sĩ nha khoa"
-      });
-    }
-
-    return merged;
+    return Array.from(new Map([...roomDentists, ...appointmentDentists].map((dentist) => [dentist._id, dentist])).values()).slice(0, 3);
   }, [rooms, clinicalQueueAppointments]);
 
   const appointmentsByDentist = useMemo(() => {
@@ -521,6 +552,15 @@ export default function ReceptionistDashboard() {
                     <button className="button small primary" onClick={() => applyScheduleStatus(appointment)}>
                       Cập nhật
                     </button>
+                    <button className="button small ghost" type="button" onClick={() => generateInvoice(appointment)}>
+                      Tạo hóa đơn
+                    </button>
+                    <button className="button small secondary" type="button" onClick={() => processPayment(appointment)}>
+                      Thanh toán
+                    </button>
+                    <button className="button small danger" type="button" onClick={() => markNoShow(appointment)}>
+                      Vắng mặt
+                    </button>
                   </div>
                 </article>
               ))}
@@ -556,17 +596,17 @@ export default function ReceptionistDashboard() {
 
           {loading ? (
             <EmptyState title="Đang tải lịch khám" text="Hệ thống đang lấy dữ liệu mới nhất." />
-          ) : (
+          ) : dentistColumns.length ? (
             <div className="reception-schedule-table-wrapper">
               <div
                 className="reception-schedule-grid"
-                style={{ gridTemplateColumns: "74px repeat(3, minmax(220px, 1fr))" }}
+                style={{ gridTemplateColumns: `74px repeat(${dentistColumns.length}, minmax(220px, 1fr))` }}
               >
                 <div className="schedule-head schedule-time-head">STT</div>
                 {dentistColumns.map((dentist) => (
                   <div className="schedule-head dentist-head" key={dentist._id}>
                     <strong>{dentist.fullName}</strong>
-                    <span>{dentist.specialty || "Bác sĩ"}</span>
+                    <span>{dentist.roomName || "Đang trực"}</span>
                   </div>
                 ))}
 
@@ -615,6 +655,8 @@ export default function ReceptionistDashboard() {
                 ))}
               </div>
             </div>
+          ) : (
+            <EmptyState title="Chưa có bác sĩ trong hàng đợi" text="Bảng này sẽ hiển thị khi có bác sĩ hoặc phòng khám được gán trong dữ liệu hệ thống." />
           )}
         </section>
       )}

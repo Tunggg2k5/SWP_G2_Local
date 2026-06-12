@@ -1,26 +1,22 @@
-import {
-  CalendarClock,
-  CalendarPlus,
-  FileText,
-  Home,
-  Menu,
-  Star,
-  X
-} from "lucide-react";
+import { CalendarClock, CalendarPlus, FileText, Home, Menu, ReceiptText, Star, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
-import EmptyState from "../components/EmptyState.jsx";
 import Feedback from "../components/Feedback.jsx";
-import StatusBadge from "../components/StatusBadge.jsx";
-import { usePublicBootstrap } from "../utils/usePublicBootstrap.js";
+import PatientAppointmentList from "../components/patient/PatientAppointmentList.jsx";
+import PatientInvoiceList from "../components/patient/PatientInvoiceList.jsx";
+import PatientTreatmentPlans from "../components/patient/PatientTreatmentPlans.jsx";
+import PatientTreatmentRecords from "../components/patient/PatientTreatmentRecords.jsx";
 import { api, getErrorMessage } from "../utils/api.js";
 import { formatDateTime, formatMoney, todayInput } from "../utils/format.js";
+import { usePublicBootstrap } from "../utils/usePublicBootstrap.js";
 import BookingPage, { bookingSlotOptions, toClinicIso } from "./BookingPage.jsx";
 
 const patientNav = [
   { id: "home", label: "Trang chủ", icon: Home },
   { id: "booking", label: "Đặt lịch", icon: CalendarPlus },
   { id: "appointments", label: "Lịch hẹn", icon: CalendarClock },
+  { id: "plans", label: "Kế hoạch", icon: FileText },
+  { id: "invoices", label: "Hóa đơn", icon: ReceiptText },
   { id: "records", label: "Hồ sơ điều trị", icon: FileText }
 ];
 
@@ -32,6 +28,7 @@ export default function PatientDashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [appointments, setAppointments] = useState([]);
   const [records, setRecords] = useState([]);
+  const [treatmentPlans, setTreatmentPlans] = useState([]);
   const [invoices, setInvoices] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [reviews, setReviews] = useState([]);
@@ -53,6 +50,7 @@ export default function PatientDashboard() {
       const res = await api.get("/patient/dashboard");
       setAppointments(res.data.appointments || []);
       setRecords(res.data.records || []);
+      setTreatmentPlans(res.data.treatmentPlans || []);
       setInvoices(res.data.invoices || []);
       setNotifications(res.data.notifications || []);
       setReviews(res.data.reviews || []);
@@ -72,8 +70,7 @@ export default function PatientDashboard() {
     if (["#home", "#services", "#about"].includes(hash)) {
       setActiveFeature("home");
       window.requestAnimationFrame(() => {
-        const target = document.querySelector(hash);
-        target?.scrollIntoView({ behavior: "smooth", block: "start" });
+        document.querySelector(hash)?.scrollIntoView({ behavior: "smooth", block: "start" });
       });
     }
   }, [location.hash]);
@@ -106,7 +103,6 @@ export default function PatientDashboard() {
   async function submitReview(event, appointmentId) {
     event.preventDefault();
     const review = reviewForms[appointmentId] || { rating: 5, comment: "" };
-
     if (!window.confirm("Xác nhận gửi đánh giá cho lịch hẹn này?")) return;
 
     try {
@@ -121,10 +117,9 @@ export default function PatientDashboard() {
 
   async function cancelAppointment(appointment) {
     if (!canModifyAppointment(appointment)) {
-      setError("Lịch hẹn đã hủy, bị hủy hoặc hoàn tất nên không thể thay đổi.");
+      setError("Lịch hẹn này không thể thay đổi thêm.");
       return;
     }
-
     if (!window.confirm("Xác nhận hủy lịch hẹn này?")) return;
 
     try {
@@ -138,7 +133,7 @@ export default function PatientDashboard() {
 
   async function rescheduleAppointment(appointment) {
     if (!canModifyAppointment(appointment)) {
-      setError("Lịch hẹn đã hủy, bị hủy hoặc hoàn tất nên không thể đổi lịch.");
+      setError("Lịch hẹn này không thể đổi lịch.");
       return;
     }
 
@@ -172,19 +167,6 @@ export default function PatientDashboard() {
     }
   }
 
-  async function markNotificationRead(notification) {
-    if (!notification.id || notification.isRead) return;
-    if (!window.confirm("Đánh dấu thông báo này là đã đọc?")) return;
-
-    try {
-      await api.patch(`/patient/notifications/${notification.id}/read`);
-      setMessage("Đã đánh dấu thông báo là đã đọc.");
-      load();
-    } catch (err) {
-      setError(getErrorMessage(err));
-    }
-  }
-
   const activeAppointments = appointments
     .filter((item) => !["cancelled", "completed", "no_show", "rejected"].includes(item.status) && new Date(item.startAt) >= new Date())
     .sort((a, b) => new Date(a.startAt) - new Date(b.startAt));
@@ -204,6 +186,7 @@ export default function PatientDashboard() {
             nextAppointment={nextAppointment}
             notifications={unreadNotifications}
             records={records}
+            treatmentPlans={treatmentPlans}
             reviews={reviews}
             services={services}
             setActiveFeature={setActiveFeature}
@@ -213,136 +196,27 @@ export default function PatientDashboard() {
         {activeFeature === "booking" && <BookingPage embedded />}
 
         {activeFeature === "appointments" && (
-          <section className="panel" id="appointments">
-            <div className="section-title">
-              <CalendarClock size={20} />
-              <h2>Lịch hẹn của tôi</h2>
-            </div>
-            {loading ? (
-              <EmptyState title="Đang tải lịch hẹn" text="Hệ thống đang lấy dữ liệu mới nhất." />
-            ) : appointments.length ? (
-              <div className="appointment-list">
-                {appointments.map((appointment) => {
-                  const invoice = invoiceByAppointment.get(appointment._id);
-                  const canReview = appointment.status === "completed";
-                  const canModify = canModifyAppointment(appointment);
-                  const reviewForm = reviewForms[appointment._id] || { rating: 5, comment: "" };
-                  const rescheduleForm = rescheduleForms[appointment._id] || {
-                    date: todayInput(),
-                    time: bookingSlotOptions[0].value,
-                    dentistId: appointment.dentist?._id || dentistOptions[0]?._id || ""
-                  };
-
-                  return (
-                    <article className="appointment-card patient-appointment-card" key={appointment._id}>
-                      <div>
-                        <h4>{appointment.service?.name}</h4>
-                        <p>
-                          {formatDateTime(appointment.startAt)} - {appointment.room?.name}
-                        </p>
-                        <span className="mini">Giờ đến: {formatDateTime(appointment.arrivalAt)}</span>
-                        <span className="mini">Bác sĩ: {appointment.dentist?.fullName}</span>
-                        {appointment.confirmationCalledAt && (
-                          <span className="mini">Lễ tân đã gọi xác nhận: {formatDateTime(appointment.confirmationCalledAt)}</span>
-                        )}
-                        {invoice && (
-                          <div className="appointment-subpanel">
-                            <strong>Hóa đơn: {formatMoney(invoice.total)}</strong>
-                            <StatusBadge value={invoice.status} />
-                          </div>
-                        )}
-                        {canModify ? (
-                          <div className="patient-appointment-actions">
-                            <button className="button small danger" onClick={() => cancelAppointment(appointment)}>
-                              Hủy lịch
-                            </button>
-                            <div className="patient-reschedule-box">
-                              <input
-                                type="date"
-                                min={todayInput()}
-                                value={rescheduleForm.date}
-                                onChange={(e) => updateRescheduleForm(appointment, { date: e.target.value })}
-                              />
-                              <select
-                                value={rescheduleForm.dentistId}
-                                onChange={(e) => updateRescheduleForm(appointment, { dentistId: e.target.value })}
-                              >
-                                {dentistOptions.map((dentist) => (
-                                  <option key={dentist._id} value={dentist._id}>
-                                    {dentist.fullName}
-                                  </option>
-                                ))}
-                              </select>
-                              <select value={rescheduleForm.time} onChange={(e) => updateRescheduleForm(appointment, { time: e.target.value })}>
-                                {bookingSlotOptions.map((option) => (
-                                  <option key={option.value} value={option.value}>
-                                    {option.label}
-                                  </option>
-                                ))}
-                              </select>
-                              <button className="button small" onClick={() => rescheduleAppointment(appointment)}>
-                                Đổi lịch
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <span className="locked-note">Lịch này không thể thay đổi thêm.</span>
-                        )}
-                        {canReview && (
-                          <form className="appointment-review-form" onSubmit={(event) => submitReview(event, appointment._id)}>
-                            <input
-                              type="number"
-                              min="1"
-                              max="5"
-                              value={reviewForm.rating}
-                              onChange={(e) => updateReviewForm(appointment._id, { rating: e.target.value })}
-                            />
-                            <input
-                              value={reviewForm.comment}
-                              onChange={(e) => updateReviewForm(appointment._id, { comment: e.target.value })}
-                              placeholder="Nhận xét"
-                              maxLength={1000}
-                            />
-                            <button className="button small secondary">Gửi đánh giá</button>
-                          </form>
-                        )}
-                      </div>
-                      <div>
-                        <StatusBadge value={appointment.status} />
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
-            ) : (
-              <EmptyState title="Chưa có lịch hẹn" text="Bạn có thể đặt lịch mới tại màn Đặt lịch." />
-            )}
-          </section>
+          <PatientAppointmentList
+            appointments={appointments}
+            canModifyAppointment={canModifyAppointment}
+            cancelAppointment={cancelAppointment}
+            dentistOptions={dentistOptions}
+            invoiceByAppointment={invoiceByAppointment}
+            loading={loading}
+            rescheduleAppointment={rescheduleAppointment}
+            rescheduleForms={rescheduleForms}
+            reviewForms={reviewForms}
+            submitReview={submitReview}
+            updateRescheduleForm={updateRescheduleForm}
+            updateReviewForm={updateReviewForm}
+          />
         )}
 
-        {activeFeature === "records" && (
-          <section className="panel" id="records">
-            <div className="section-title">
-              <FileText size={20} />
-              <h2>Hồ sơ điều trị</h2>
-            </div>
-            {loading ? (
-              <EmptyState title="Đang tải hồ sơ" text="Hệ thống đang lấy dữ liệu mới nhất." />
-            ) : records.length ? (
-              <div className="mini-list">
-                {records.map((record) => (
-                  <div className="record-card" key={record._id}>
-                    <strong>{record.appointment?.service?.name}</strong>
-                    <p>{record.diagnosis || "Chưa có chẩn đoán"}</p>
-                    <span className="mini">{record.treatmentPlan || record.treatmentResult || "Chưa có kế hoạch điều trị"}</span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <EmptyState />
-            )}
-          </section>
-        )}
+        {activeFeature === "plans" && <PatientTreatmentPlans loading={loading} treatmentPlans={treatmentPlans} />}
+
+        {activeFeature === "invoices" && <PatientInvoiceList invoices={invoices} loading={loading} />}
+
+        {activeFeature === "records" && <PatientTreatmentRecords loading={loading} records={records} />}
       </main>
 
       {sidebarOpen ? (
@@ -375,65 +249,54 @@ export default function PatientDashboard() {
   );
 }
 
-function PatientHome({ activeAppointments, dentistOptions, nextAppointment, notifications, records, reviews, services, setActiveFeature }) {
+function PatientHome({ activeAppointments, dentistOptions, nextAppointment, notifications, records, treatmentPlans, reviews, services, setActiveFeature }) {
   const visibleServices = services.length ? services.slice(0, 5) : [
-    { _id: "implant", name: "Cấy ghép Implant", description: "Phục hồi răng mất bằng giải pháp implant hiện đại.", price: 0 },
-    { _id: "cosmetic", name: "Thẩm mỹ răng sứ", description: "Thiết kế nụ cười tự nhiên, cân đối và bền đẹp.", price: 0 },
-    { _id: "ortho", name: "Chỉnh nha niềng răng", description: "Theo dõi lộ trình chỉnh nha phù hợp từng bệnh nhân.", price: 0 },
-    { _id: "general", name: "Điều trị tổng quát", description: "Thăm khám, điều trị và chăm sóc răng miệng định kỳ.", price: 0 }
+    { _id: "fallback-service-1", name: "Khám tổng quát", description: "Kiểm tra răng miệng định kỳ và tư vấn kế hoạch điều trị.", price: 0 },
+    { _id: "fallback-service-2", name: "Trám răng", description: "Phục hồi răng sâu, mẻ bằng vật liệu nha khoa an toàn.", price: 350000 },
+    { _id: "fallback-service-3", name: "Tẩy trắng răng", description: "Cải thiện màu răng với quy trình chuyên nghiệp tại phòng khám.", price: 1200000 }
   ];
   const recentReviews = reviews.slice(0, 4);
 
   return (
-    <div className="patient-public-home patient-dark-home">
+    <>
       <section className="patient-dark-hero" id="home">
-        <div className="patient-dark-hero-copy">
-          <span className="patient-dark-pill">Dịch vụ của chúng tôi</span>
-          <h1>Chăm Sóc Toàn Diện Cho Nụ Cười Của Bạn</h1>
-          <p>Từ kiểm tra định kỳ đến các giải pháp thẩm mỹ nha khoa, SmileCare đồng hành cùng bạn trong hành trình chăm sóc sức khỏe răng miệng.</p>
-          <div className="patient-home-actions">
-            <button className="button primary" onClick={() => setActiveFeature("booking")}>
-              Đặt lịch ngay
-            </button>
-            <button className="button ghost" onClick={() => setActiveFeature("appointments")}>
-              Xem lịch hẹn
-            </button>
+        <div>
+          <span className="patient-hero-pill">Xin chào</span>
+          <h1>Chăm sóc lịch khám và hồ sơ nha khoa của bạn</h1>
+          <p>Theo dõi lịch hẹn, kế hoạch điều trị, hóa đơn và đánh giá dịch vụ SmileCare trong cùng một màn hình.</p>
+          <div className="patient-hero-actions">
+            <button className="button primary" onClick={() => setActiveFeature("booking")}>Đặt lịch mới</button>
+            <button className="button ghost" onClick={() => setActiveFeature("appointments")}>Xem lịch hẹn</button>
           </div>
         </div>
-
-        <div className="patient-home-panel patient-dark-panel">
-          <div className="section-title tight-title">
-            <CalendarClock size={20} />
-            <h2>Trung tâm bệnh nhân</h2>
-          </div>
-          <div className="patient-home-summary">
-            <span>Lịch sắp tới <strong>{activeAppointments.length}</strong></span>
-            <span>Thông báo mới <strong>{notifications.length}</strong></span>
-            <span>Hồ sơ điều trị <strong>{records.length}</strong></span>
-          </div>
-          {nextAppointment ? (
-            <div className="patient-next-box">
-              <strong>{nextAppointment.service?.name}</strong>
-              <span>{formatDateTime(nextAppointment.startAt)} - {nextAppointment.room?.name}</span>
-              <small>Bác sĩ: {nextAppointment.dentist?.fullName}</small>
-            </div>
-          ) : (
-            <EmptyState title="Chưa có lịch sắp tới" text="Bạn có thể đặt lịch mới ngay trong hệ thống." />
-          )}
-        </div>
+        <aside className="patient-hero-summary">
+          <span>Lịch sắp tới <strong>{activeAppointments.length}</strong></span>
+          <span>Kế hoạch <strong>{treatmentPlans.length}</strong></span>
+          <span>Thông báo <strong>{notifications.length}</strong></span>
+        </aside>
       </section>
 
+      {nextAppointment && (
+        <section className="patient-next-card">
+          <div>
+            <span className="patient-hero-pill">Lịch gần nhất</span>
+            <strong>{nextAppointment.service?.name}</strong>
+            <p>{formatDateTime(nextAppointment.startAt)} - {nextAppointment.room?.name || "Phòng khám"}</p>
+            <small>Bác sĩ: {nextAppointment.dentist?.fullName}</small>
+          </div>
+          <button className="button small" onClick={() => setActiveFeature("appointments")}>Chi tiết</button>
+        </section>
+      )}
+
       <section className="patient-dark-section" id="services">
-        <div className="patient-dark-section-head">
-          <span className="patient-dark-pill">Dịch vụ nha khoa</span>
-          <h2>Chăm sóc toàn diện cho từng nhu cầu điều trị</h2>
+        <div className="patient-section-heading">
+          <span>Dịch vụ</span>
+          <h2>Những dịch vụ bạn có thể đặt lịch</h2>
         </div>
         <div className="patient-dark-service-grid">
           {visibleServices.map((service, index) => (
             <article className={`patient-dark-service-card service-tone-${index % 5}`} key={service._id}>
-              <span className="patient-service-badge">
-                <CalendarPlus size={18} />
-              </span>
+              <span className="patient-service-badge">{String(index + 1).padStart(2, "0")}</span>
               <div>
                 <h3>{service.name}</h3>
                 <p>{service.description || "Dịch vụ chăm sóc răng miệng tại phòng khám."}</p>
@@ -444,32 +307,33 @@ function PatientHome({ activeAppointments, dentistOptions, nextAppointment, noti
         </div>
       </section>
 
-      <section className="patient-dark-section patient-dark-about" id="about">
-        <div className="patient-dark-visual-panel" />
-        <div className="patient-dark-info-stack">
-          <span className="patient-dark-pill gold">Tư vấn nhanh</span>
-          <h2>Giải đáp thắc mắc về sức khỏe răng miệng</h2>
+      <section className="patient-dark-section patient-about-section" id="about">
+        <div className="patient-section-heading">
+          <span>Giới thiệu</span>
+          <h2>SmileCare đồng bộ lịch hẹn, bác sĩ và phòng điều trị</h2>
+        </div>
+        <div className="patient-about-grid">
           <article>
-            <strong>Thời gian làm việc</strong>
-            <p>Thứ 2 - Thứ 7, 8h-11h30 và 14h-17h30.</p>
-          </article>
-          <article>
-            <strong>Đội ngũ bác sĩ</strong>
+            <strong>{dentistOptions.length || 3}</strong>
             <p>{dentistOptions.length || 3} bác sĩ phụ trách khám, tư vấn và theo dõi điều trị.</p>
           </article>
           <article>
-            <strong>Quản lý lịch hẹn</strong>
-            <p>Bạn có thể đặt lịch, đổi lịch hoặc hủy lịch khi lịch chưa bị hủy, vắng mặt hoặc hoàn tất.</p>
+            <strong>{records.length}</strong>
+            <p>Hồ sơ điều trị đã ghi nhận cho tài khoản của bạn.</p>
+          </article>
+          <article>
+            <strong>{activeAppointments.length}</strong>
+            <p>Lịch khám đang chờ xử lý hoặc đã xác nhận trong thời gian tới.</p>
           </article>
         </div>
       </section>
 
-      <section className="patient-dark-section" id="contact">
-        <div className="patient-dark-section-head">
-          <span className="patient-dark-pill gold">Khách hàng nói gì</span>
-          <h2>Đánh giá gần đây nhất của tôi</h2>
-        </div>
-        {recentReviews.length ? (
+      {recentReviews.length ? (
+        <section className="patient-dark-section">
+          <div className="patient-section-heading">
+            <span>Đánh giá gần đây</span>
+            <h2>Trải nghiệm từ bệnh nhân SmileCare</h2>
+          </div>
           <div className="patient-dark-review-grid">
             {recentReviews.map((review) => (
               <article className="patient-dark-review-card" key={review._id}>
@@ -484,26 +348,12 @@ function PatientHome({ activeAppointments, dentistOptions, nextAppointment, noti
               </article>
             ))}
           </div>
-        ) : (
-          <EmptyState title="Chưa có đánh giá gần đây" text="Sau khi lịch hoàn tất, bạn có thể gửi đánh giá tại tab Lịch hẹn." />
-        )}
-      </section>
-
-      <footer className="patient-dark-footer">
-        <div>
-          <strong>Smile<span>Care</span></strong>
-          <p>Nha khoa SmileCare - Đồng hành cùng nụ cười Việt.</p>
-        </div>
-        <nav>
-          <a href="#services">Dịch vụ</a>
-          <a href="#about">Giới thiệu</a>
-          <button type="button" onClick={() => setActiveFeature("booking")}>Đặt lịch</button>
-        </nav>
-      </footer>
-    </div>
+        </section>
+      ) : null}
+    </>
   );
 }
 
 function canModifyAppointment(appointment) {
-  return !lockedPatientStatuses.has(appointment.status);
+  return !lockedPatientStatuses.has(appointment.status) && new Date(appointment.startAt) > new Date();
 }

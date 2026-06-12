@@ -152,7 +152,7 @@ export default function BookingPage({ embedded = false }) {
               <option value="random">Bác sĩ ngẫu nhiên</option>
               {dentistOptions.map((dentist) => (
                 <option value={dentist._id} key={dentist._id}>
-                  {dentist.fullName}{dentist.specialty ? ` - ${dentist.specialty}` : ""}
+                  {dentist.fullName}
                 </option>
               ))}
             </select>

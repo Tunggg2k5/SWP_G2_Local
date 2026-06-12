@@ -22,6 +22,7 @@ function getClinicalFeatures(role) {
 const defaultRecordForm = {
   appointmentId: "",
   bloodPressure: "",
+  heartRate: "",
   spo2: "",
   temperature: "",
   respiratoryRate: "",
@@ -52,6 +53,7 @@ export default function ClinicalDashboard() {
   const [records, setRecords] = useState([]);
   const [rooms, setRooms] = useState([]);
   const [services, setServices] = useState([]);
+  const [staffSchedules, setStaffSchedules] = useState([]);
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [recordForm, setRecordForm] = useState(defaultRecordForm);
@@ -71,6 +73,7 @@ export default function ClinicalDashboard() {
       setRecords(res.data.records || []);
       setRooms(nextRooms);
       setServices(nextServices);
+      setStaffSchedules(res.data.staffSchedules || []);
       setRecordForm((current) => ({
         ...current,
         appointmentId: current.appointmentId || nextAppointments[0]?._id || ""
@@ -152,10 +155,12 @@ export default function ClinicalDashboard() {
         ? {
             vitalSigns: {
               bloodPressure: recordForm.bloodPressure,
+              heartRate: recordForm.heartRate,
               spo2: recordForm.spo2,
               temperature: recordForm.temperature,
               respiratoryRate: recordForm.respiratoryRate
-            }
+            },
+            treatmentNote: recordForm.treatmentNote
           }
         : {
             diagnosis: recordForm.diagnosis,
@@ -247,16 +252,32 @@ export default function ClinicalDashboard() {
             </div>
           </div>
 
+          <div className="mini-list clinical-work-schedule-list">
+            {staffSchedules.length ? (
+              staffSchedules.map((schedule) => (
+                <div className="mini-row" key={schedule._id}>
+                  <span>Ca làm: {schedule.startTime} - {schedule.endTime}</span>
+                  <span>{schedule.room?.name || "Chưa gán phòng"}</span>
+                  <StatusBadge value={schedule.status} />
+                </div>
+              ))
+            ) : (
+              <div className="mini-row">
+                <span>Chưa có ca làm được phân công trong ngày này.</span>
+              </div>
+            )}
+          </div>
+
           {loading ? (
             <EmptyState title="Đang tải lịch khám" text="Hệ thống đang lấy dữ liệu mới nhất." />
-          ) : appointments.length ? (
+          ) : appointments.length && clinicalColumns.length ? (
             <div className="reception-schedule-table-wrapper">
               <div className="reception-schedule-grid clinical-schedule-grid" style={{ gridTemplateColumns: `74px repeat(${clinicalColumns.length}, minmax(250px, 1fr))` }}>
                 <div className="schedule-head schedule-index-head">STT</div>
                 {clinicalColumns.map((column) => (
                   <div className="schedule-head" key={column._id}>
                     <strong>{column.fullName}</strong>
-                    <span>{column.specialty || column.roomName || "Bác sĩ phụ trách"}</span>
+                    <span>{column.roomName || "Đang trực"}</span>
                   </div>
                 ))}
                 {clinicalRows.map((row) => (
@@ -332,6 +353,10 @@ export default function ClinicalDashboard() {
                   <input value={recordForm.bloodPressure} onChange={(event) => updateRecord("bloodPressure", event.target.value)} />
                 </label>
                 <label className="field">
+                  <span>Nhá»‹p tim</span>
+                  <input value={recordForm.heartRate} onChange={(event) => updateRecord("heartRate", event.target.value)} />
+                </label>
+                <label className="field">
                   <span>SpO2</span>
                   <input value={recordForm.spo2} onChange={(event) => updateRecord("spo2", event.target.value)} />
                 </label>
@@ -342,6 +367,10 @@ export default function ClinicalDashboard() {
                 <label className="field">
                   <span>Nhịp thở</span>
                   <input value={recordForm.respiratoryRate} onChange={(event) => updateRecord("respiratoryRate", event.target.value)} />
+                </label>
+                <label className="field wide">
+                  <span>Ghi chú hỗ trợ chẩn đoán</span>
+                  <textarea value={recordForm.treatmentNote} onChange={(event) => updateRecord("treatmentNote", event.target.value)} rows="3" />
                 </label>
               </div>
             ) : (
@@ -514,7 +543,6 @@ function buildClinicalColumns(appointments, rooms) {
       columns.set(room.assignedDentist._id, {
         _id: room.assignedDentist._id,
         fullName: room.assignedDentist.fullName,
-        specialty: room.assignedDentist.specialty,
         roomName: room.name
       });
     }
@@ -524,17 +552,12 @@ function buildClinicalColumns(appointments, rooms) {
       columns.set(appointment.dentist._id, {
         _id: appointment.dentist._id,
         fullName: appointment.dentist.fullName,
-        specialty: appointment.dentist.specialty,
         roomName: appointment.room?.name
       });
     }
   });
 
-  const result = Array.from(columns.values()).slice(0, 3);
-  while (result.length < 3) {
-    result.push({ _id: `empty-${result.length + 1}`, fullName: `Bác sĩ ${result.length + 1}`, specialty: "Chưa có lịch" });
-  }
-  return result;
+  return Array.from(columns.values()).slice(0, 3);
 }
 
 function buildClinicalRows(appointments, columns) {
