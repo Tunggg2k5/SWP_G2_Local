@@ -1,0 +1,7 @@
+npm error Lifecycle script `dev` failed with error:
+npm error code 1073807364
+npm error path C:\Users\ADMIN\Documents\DAS-Compass\das-api
+npm error workspace @das/das-api@1.0.0
+npm error location C:\Users\ADMIN\Documents\DAS-Compass\das-api
+npm error command failed
+npm error command C:\WINDOWS\system32\cmd.exe /d /s /c nodemon src/server.js
