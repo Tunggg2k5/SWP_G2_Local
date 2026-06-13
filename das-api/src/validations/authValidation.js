@@ -11,7 +11,7 @@ export const registerSchema = z
     confirmPassword: z.string().min(1)
   })
   .refine((data) => data.password === data.confirmPassword, {
-    message: "Mat khau nhap lai khong khop.",
+    message: "Mật khẩu nhập lại không khớp.",
     path: ["confirmPassword"]
   });
 

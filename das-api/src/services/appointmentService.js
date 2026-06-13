@@ -114,7 +114,7 @@ async function assertNotPastCheckIn(appointment) {
     appointment.cancelledAt = new Date();
     appointment.cancellationReason = "Hệ thống tự hủy vì bệnh nhân chưa check-in trước 17:30.";
     appointment.receptionistNote = "Hệ thống tự hủy vì bệnh nhân chưa có trạng thái Có mặt trước 17:30.";
-    await appointment.save();
+    await appointmentRepository.saveAppointment(appointment);
     throw createError("Lịch hẹn đã quá 17:30 và được hệ thống tự hủy vì bệnh nhân chưa check-in.", 409);
   }
 }
@@ -221,7 +221,7 @@ export async function rescheduleAppointment(appointmentId, user, body) {
 
   if (["pending", "rejected"].includes(previousStatus)) {
     updated.status = previousStatus;
-    await updated.save();
+    await appointmentRepository.saveAppointment(updated);
   }
 
   await appointmentRepository.populateAppointment(updated);
@@ -247,7 +247,7 @@ export async function scheduleByReception(appointmentId, user, body) {
   updated.status = "confirmed";
   updated.receptionist = user._id;
   updated.receptionistNote = data.note || "Lễ tân đã xếp lịch khám cho bệnh nhân.";
-  await updated.save();
+  await appointmentRepository.saveAppointment(updated);
   await appointmentRepository.populateAppointment(updated);
 
   await appointmentRepository.createPatientNotification({
@@ -272,7 +272,7 @@ export async function cancelAppointment(appointmentId, user, body) {
   appointment.cancelledBy = user._id;
   appointment.cancelledByRole = user.role;
   appointment.cancellationReason = data.reason;
-  await appointment.save();
+  await appointmentRepository.saveAppointment(appointment);
 
   if (appointment.appointmentSlot) {
     await appointmentRepository.updateAppointmentSlotStatus(appointment.appointmentSlot, "cancelled");
@@ -330,7 +330,7 @@ export async function updateAppointmentStatus(appointmentId, user, body) {
     appointment.cancellationReason = undefined;
   }
 
-  await appointment.save();
+  await appointmentRepository.saveAppointment(appointment);
 
   if (["cancelled", "rejected", "waitlisted"].includes(data.status) && appointment.appointmentSlot) {
     await appointmentRepository.updateAppointmentSlotStatus(appointment.appointmentSlot, "cancelled");
@@ -366,7 +366,7 @@ export async function recordConfirmationCall(appointmentId, user, body) {
     appointment.status = "confirmed";
   }
 
-  await appointment.save();
+  await appointmentRepository.saveAppointment(appointment);
   await appointmentRepository.createPatientNotification({
     user: appointment.patient,
     title: "Lịch hẹn đã được xác nhận",
@@ -407,7 +407,7 @@ export async function checkInAppointment(appointmentId, user, body) {
     appointment.paymentStatus = appointment.service.requiresPrepayment ? "paid" : "not_required";
     invoice.status = "paid";
     invoice.paidAt = new Date();
-    await invoice.save();
+    await appointmentRepository.saveInvoice(invoice);
     await appointmentRepository.createPayment({
       invoice: invoice._id,
       amount: invoice.total,
@@ -416,7 +416,7 @@ export async function checkInAppointment(appointmentId, user, body) {
     });
   }
 
-  await appointment.save();
+  await appointmentRepository.saveAppointment(appointment);
   await appointmentRepository.createPatientNotification({
     user: appointment.patient,
     title: "Đã ghi nhận bệnh nhân đến",
@@ -443,7 +443,7 @@ export async function markNoShow(appointmentId, user, body) {
   if (appointment.appointmentSlot) {
     await appointmentRepository.updateAppointmentSlotStatus(appointment.appointmentSlot, "cancelled");
   }
-  await appointment.save();
+  await appointmentRepository.saveAppointment(appointment);
   await appointmentRepository.populateAppointment(appointment);
   return appointment;
 }
@@ -462,10 +462,10 @@ export async function processAppointmentPayment(appointmentId, body) {
   const invoice = await ensureAppointmentInvoice(appointment);
   invoice.status = "paid";
   invoice.paidAt = new Date();
-  await invoice.save();
+  await appointmentRepository.saveInvoice(invoice);
 
   appointment.paymentStatus = appointment.service?.requiresPrepayment ? "paid" : "not_required";
-  await appointment.save();
+  await appointmentRepository.saveAppointment(appointment);
 
   const payment = await appointmentRepository.createPayment({
     invoice: invoice._id,

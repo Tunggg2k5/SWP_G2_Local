@@ -1,20 +1,21 @@
-import ClinicRoom from "../models/ClinicRoom.js";
-import ConsultationRequest from "../models/ConsultationRequest.js";
-import DentalService from "../models/DentalService.js";
-import Dentist from "../models/Dentist.js";
-import Review from "../models/Review.js";
-import User from "../models/User.js";
+import { toObjectId } from "../config/mongodb.js";
+import { COLLECTIONS } from "../models/collections.js";
+import {
+  findById,
+  findMany,
+  insertDocuments,
+  populate
+} from "./mongoRepository.js";
 
 const PUBLIC_DENTIST_LIMIT = 3;
-const publicDentistSelect = "fullName email phone avatar avatarUrl yearsOfExperience bio licenseNo createdAt";
+const publicDentistProjection =
+  "fullName email phone avatar avatarUrl yearsOfExperience bio licenseNo role status createdAt";
 
 export function findActiveServices() {
-  return DentalService.find({ isActive: true }).sort({ name: 1 }).lean();
+  return findMany(COLLECTIONS.dentalServices, { isActive: true }, { sort: { name: 1 } });
 }
 
 function normalizeDentist(user, profile) {
-  const yearsOfExperience = Number(user.yearsOfExperience || profile?.experienceYears || 0);
-
   return {
     _id: user._id,
     fullName: user.fullName,
@@ -22,7 +23,7 @@ function normalizeDentist(user, profile) {
     phone: user.phone,
     avatar: user.avatar,
     avatarUrl: user.avatarUrl,
-    yearsOfExperience,
+    yearsOfExperience: Number(user.yearsOfExperience || profile?.experienceYears || 0),
     licenseNo: user.licenseNo,
     qualification: profile?.qualification || "Bác sĩ Răng Hàm Mặt",
     bio: user.bio || profile?.description || "",
@@ -33,57 +34,61 @@ function normalizeDentist(user, profile) {
 
 async function attachDentistProfiles(users) {
   if (!users.length) return [];
-
-  const profiles = await Dentist.find({
+  const profiles = await findMany(COLLECTIONS.dentists, {
     user: { $in: users.map((user) => user._id) },
     status: "active"
-  })
-    .select("user qualification experienceYears description")
-    .lean();
+  });
   const profileMap = new Map(profiles.map((profile) => [profile.user.toString(), profile]));
-
   return users.map((user) => normalizeDentist(user, profileMap.get(user._id.toString())));
 }
 
 export async function findActiveDentists() {
-  const users = await User.find({ role: "dentist", status: "active" })
-    .select(publicDentistSelect)
-    .sort({ fullName: 1 })
-    .limit(PUBLIC_DENTIST_LIMIT)
-    .lean();
-
+  const users = await findMany(
+    COLLECTIONS.users,
+    { role: "dentist", status: "active" },
+    { projection: publicDentistProjection, sort: { fullName: 1 }, limit: PUBLIC_DENTIST_LIMIT }
+  );
   return attachDentistProfiles(users);
 }
 
 export async function findActiveDentistById(id) {
-  const user = await User.findOne({ _id: id, role: "dentist", status: "active" }).select(publicDentistSelect).lean();
-  if (!user) return null;
+  const user = await findById(COLLECTIONS.users, id, publicDentistProjection);
+  if (!user || user.role !== "dentist" || user.status !== "active") return null;
   const [dentist] = await attachDentistProfiles([user]);
   return dentist;
 }
 
-export function findActiveRooms() {
-  return ClinicRoom.find({ isActive: true })
-    .populate("assignedDentist", "fullName avatarUrl yearsOfExperience bio phone")
-    .sort({ name: 1 })
-    .lean();
+export async function findActiveRooms() {
+  const rooms = await findMany(COLLECTIONS.clinicRooms, { isActive: true }, { sort: { name: 1 } });
+  await populate(rooms, {
+    path: "assignedDentist",
+    select: "fullName avatarUrl yearsOfExperience bio phone"
+  });
+  return rooms;
 }
 
-export function findPublicReviews(limit = 8) {
-  return Review.find({ comment: { $exists: true, $ne: "" } })
-    .populate("patient", "fullName")
-    .populate("service", "name")
-    .populate("dentist", "fullName")
-    .sort({ createdAt: -1 })
-    .limit(limit)
-    .lean();
+export async function findPublicReviews(limit = 8) {
+  const reviews = await findMany(
+    COLLECTIONS.reviews,
+    { comment: { $exists: true, $ne: "" } },
+    { sort: { createdAt: -1 }, limit }
+  );
+  await populate(reviews, [
+    { path: "patient", select: "fullName" },
+    { path: "service", select: "name" },
+    { path: "dentist", select: "fullName" }
+  ]);
+  return reviews;
 }
 
-export function findReviewsByDentist(dentistId, limit = 10) {
-  return Review.find({ dentist: dentistId })
-    .populate("patient", "fullName")
-    .sort({ createdAt: -1 })
-    .limit(limit);
+export async function findReviewsByDentist(dentistId, limit = 10) {
+  const reviews = await findMany(
+    COLLECTIONS.reviews,
+    { dentist: toObjectId(dentistId) },
+    { sort: { createdAt: -1 }, limit }
+  );
+  await populate(reviews, { path: "patient", select: "fullName" });
+  return reviews;
 }
 
 export async function getPublicBootstrapData() {
@@ -93,10 +98,12 @@ export async function getPublicBootstrapData() {
     findActiveRooms(),
     findPublicReviews(8)
   ]);
-
   return { services, dentists, rooms, reviews };
 }
 
 export function createConsultationRequest(data) {
-  return ConsultationRequest.create(data);
+  return insertDocuments(COLLECTIONS.consultationRequests, {
+    status: "new",
+    ...data
+  });
 }

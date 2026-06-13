@@ -101,10 +101,10 @@ export async function resetPatientPassword(patientId, body) {
     throw createError("Không tìm thấy tài khoản bệnh nhân.", 404);
   }
 
-  patient.passwordHash = await hashPassword(data.password);
-  await patient.save();
-
-  const object = patient.toObject();
+  const updatedPatient = await receptionRepository.updatePatientUser(patient._id, {
+    passwordHash: await hashPassword(data.password)
+  });
+  const object = { ...updatedPatient };
   delete object.passwordHash;
   return { patient: object, temporaryPassword: data.password };
 }
@@ -115,24 +115,25 @@ export async function createPatient(body) {
 
   if (duplicate) {
     if (data.createAccount && duplicate.status !== "active" && duplicate.role === "patient") {
-      duplicate.fullName = data.fullName;
-      duplicate.gender = data.gender;
-      duplicate.address = data.address || undefined;
-      duplicate.passwordHash = await hashPassword(data.password);
-      duplicate.status = "active";
-      await duplicate.save();
+      const reactivated = await receptionRepository.updatePatientUser(duplicate._id, {
+        fullName: data.fullName,
+        gender: data.gender,
+        address: data.address || undefined,
+        passwordHash: await hashPassword(data.password),
+        status: "active"
+      });
       await receptionRepository.upsertPatientProfile(duplicate._id, {
         gender: data.gender,
         address: data.address || undefined
       });
 
-      const object = duplicate.toObject();
+      const object = { ...reactivated };
       delete object.passwordHash;
       return { statusCode: 200, patient: object };
     }
 
     if (!data.createAccount && duplicate.role === "patient" && duplicate.status !== "active") {
-      const object = duplicate.toObject();
+      const object = { ...duplicate };
       delete object.passwordHash;
       return { statusCode: 200, patient: object };
     }
@@ -166,7 +167,7 @@ export async function createPatient(body) {
     address: data.address || undefined
   });
 
-  const object = patient.toObject();
+  const object = { ...patient };
   delete object.passwordHash;
   return { statusCode: 201, patient: object };
 }

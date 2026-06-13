@@ -6,7 +6,13 @@ export default function DentistCard({ dentist }) {
   return (
     <article className="smile-dentist-card" key={dentist._id}>
       {dentist.avatarUrl ? (
-        <img className="smile-dentist-photo" src={dentist.avatarUrl} alt={dentist.fullName} loading="lazy" />
+        <img
+          className="smile-dentist-photo"
+          src={dentist.avatarUrl}
+          alt={dentist.fullName}
+          decoding="async"
+          loading="eager"
+        />
       ) : (
         <span className="smile-dentist-initial">{dentist.fullName?.trim()?.[0]?.toUpperCase() || "B"}</span>
       )}
@@ -14,7 +20,6 @@ export default function DentistCard({ dentist }) {
       <strong>{experienceText}</strong>
       <p>{description}</p>
       <div className="smile-dentist-meta">
-        {dentist.qualification && <span>{dentist.qualification}</span>}
         {dentist.licenseNo && <span>Mã hành nghề: {dentist.licenseNo}</span>}
       </div>
     </article>

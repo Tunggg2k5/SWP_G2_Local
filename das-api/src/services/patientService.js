@@ -36,7 +36,7 @@ export async function payInvoice(invoiceId, patientId) {
 
   invoice.status = "paid";
   invoice.paidAt = new Date();
-  await invoice.save();
+  const paidInvoice = await patientRepository.saveInvoice(invoice);
 
   if (invoice.appointment) {
     await patientRepository.updateAppointmentPaymentStatus(invoice.appointment, patientId, "paid");
@@ -49,7 +49,7 @@ export async function payInvoice(invoiceId, patientId) {
     paymentMethod: "online"
   });
 
-  return invoice;
+  return paidInvoice;
 }
 
 export function getTreatmentRecords(patientId) {

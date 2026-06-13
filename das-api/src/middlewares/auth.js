@@ -1,5 +1,5 @@
 import jwt from "jsonwebtoken";
-import User from "../models/User.js";
+import * as userRepository from "../repository/userRepository.js";
 import { getJwtSecret } from "../utils/tokens.js";
 
 export async function requireAuth(req, _res, next) {
@@ -14,7 +14,7 @@ export async function requireAuth(req, _res, next) {
 
   try {
     const payload = jwt.verify(token, getJwtSecret());
-    const user = await User.findById(payload.sub).select("-passwordHash");
+    const user = await userRepository.findActiveUserById(payload.sub);
 
     if (!user || user.status !== "active") {
       const err = new Error("Tài khoản đang không hoạt động.");

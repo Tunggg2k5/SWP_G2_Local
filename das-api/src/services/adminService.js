@@ -406,7 +406,7 @@ export async function createUser(body) {
   });
   await createRoleProfile(user, data);
 
-  const object = user.toObject();
+  const object = { ...user };
   delete object.passwordHash;
   return object;
 }
@@ -420,10 +420,11 @@ export async function resetUserPassword(userId, body) {
   }
 
   const temporaryPassword = data.password || generateTemporaryPassword();
-  user.passwordHash = await hashPassword(temporaryPassword);
-  await user.save();
-
-  const object = user.toObject();
+  const updatedUser = await adminRepository.saveUser({
+    ...user,
+    passwordHash: await hashPassword(temporaryPassword)
+  });
+  const object = { ...updatedUser };
   delete object.passwordHash;
   return { user: object, temporaryPassword };
 }

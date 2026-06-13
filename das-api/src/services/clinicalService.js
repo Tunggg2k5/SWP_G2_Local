@@ -218,13 +218,13 @@ export async function updateTreatmentPlan(user, planId, body) {
 
   Object.assign(existing, data);
   if (data.status === "completed") existing.endDate = new Date();
-  await existing.save();
+  const savedPlan = await clinicalRepository.saveTreatmentPlan(existing);
 
   if (data.planDetail) {
     await clinicalRepository.updateTreatmentRecordPlan(existing.treatmentRecord, data.planDetail);
   }
 
-  return existing;
+  return savedPlan;
 }
 
 export async function createFollowUpAppointment(user, appointmentId, body) {
@@ -258,12 +258,7 @@ export async function createFollowUpAppointment(user, appointmentId, body) {
     dentistPreference: "selected"
   });
 
-  await appointment.populate([
-    { path: "patient", select: "fullName phone email" },
-    { path: "dentist", select: "fullName" },
-    { path: "room", select: "name status" },
-    { path: "service", select: "name durationMinutes" }
-  ]);
+  await clinicalRepository.populateClinicalAppointment(appointment);
 
   await clinicalRepository.createNotification({
     user: appointment.patient?._id || appointment.patient,

@@ -1,60 +1,96 @@
-import Notification from "../models/Notification.js";
-import Patient from "../models/Patient.js";
-import Role from "../models/Role.js";
-import User from "../models/User.js";
+import { getCollection, toObjectId } from "../config/mongodb.js";
+import { COLLECTIONS } from "../models/collections.js";
+import {
+  findById,
+  findMany,
+  findOne,
+  insertDocuments,
+  updateById,
+  updateOneAndReturn
+} from "./mongoRepository.js";
 
 export function findUserByPhone(phone, projection) {
-  return User.findOne({ phone }).select(projection || "");
+  return findOne(COLLECTIONS.users, { phone }, projection);
 }
 
 export function findActiveUserById(id) {
-  return User.findById(id).select("-passwordHash");
+  return findById(COLLECTIONS.users, id, "-passwordHash");
 }
 
 export function findUserByIdWithPassword(id) {
-  return User.findById(id).select("+resetPasswordCodeHash +resetPasswordExpiresAt");
+  return findById(COLLECTIONS.users, id);
 }
 
 export function findUserByPhoneWithResetFields(phone) {
-  return User.findOne({ phone }).select("+resetPasswordCodeHash +resetPasswordExpiresAt");
+  return findOne(COLLECTIONS.users, { phone });
 }
 
 export function findDuplicatePhone(phone, excludedUserId) {
-  return User.findOne({ phone, _id: { $ne: excludedUserId } });
+  return findOne(COLLECTIONS.users, {
+    phone,
+    _id: { $ne: toObjectId(excludedUserId) }
+  });
 }
 
 export function upsertRole(query, data) {
-  return Role.findOneAndUpdate(query, data, { new: true, upsert: true });
+  return updateOneAndReturn(COLLECTIONS.roles, query, data, { upsert: true });
 }
 
 export function createUser(data) {
-  return User.create(data);
+  return insertDocuments(COLLECTIONS.users, {
+    role: "patient",
+    status: "active",
+    gender: "unknown",
+    yearsOfExperience: 0,
+    ...data
+  });
 }
 
 export function createPatientProfile(data) {
-  return Patient.create(data);
+  return insertDocuments(COLLECTIONS.patients, {
+    gender: "unknown",
+    ...data
+  });
 }
 
 export function updatePatientProfileByUser(userId, data) {
-  return Patient.findOneAndUpdate({ user: userId }, data, { upsert: true });
+  return updateOneAndReturn(
+    COLLECTIONS.patients,
+    { user: toObjectId(userId) },
+    { ...data, user: toObjectId(userId) },
+    { upsert: true }
+  );
 }
 
 export function updateUserById(id, data) {
-  return User.findByIdAndUpdate(id, data, { new: true }).select("-passwordHash");
+  return updateById(COLLECTIONS.users, id, data);
+}
+
+export function saveUser(user) {
+  const update = { ...user };
+  delete update._id;
+  return updateById(COLLECTIONS.users, user._id, update);
 }
 
 export function findNotificationsByUser(userId, limit = 50) {
-  return Notification.find({ user: userId }).sort({ createdAt: -1 }).limit(limit);
+  return findMany(
+    COLLECTIONS.notifications,
+    { user: toObjectId(userId) },
+    { sort: { createdAt: -1 }, limit }
+  );
 }
 
 export function markAllNotificationsRead(userId) {
-  return Notification.updateMany({ user: userId, isRead: false }, { isRead: true });
+  return getCollection(COLLECTIONS.notifications).updateMany(
+    { user: toObjectId(userId), isRead: false },
+    { $set: { isRead: true, updatedAt: new Date() } }
+  );
 }
 
 export function markNotificationRead(userId, notificationId) {
-  return Notification.findOneAndUpdate(
-    { _id: notificationId, user: userId },
-    { isRead: true },
-    { new: true }
+  return updateOneAndReturn(
+    COLLECTIONS.notifications,
+    { _id: toObjectId(notificationId), user: toObjectId(userId) },
+    { isRead: true }
   );
 }

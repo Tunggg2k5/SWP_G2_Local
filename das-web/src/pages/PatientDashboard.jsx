@@ -250,11 +250,7 @@ export default function PatientDashboard() {
 }
 
 function PatientHome({ activeAppointments, dentistOptions, nextAppointment, notifications, records, treatmentPlans, reviews, services, setActiveFeature }) {
-  const visibleServices = services.length ? services.slice(0, 5) : [
-    { _id: "fallback-service-1", name: "Khám tổng quát", description: "Kiểm tra răng miệng định kỳ và tư vấn kế hoạch điều trị.", price: 0 },
-    { _id: "fallback-service-2", name: "Trám răng", description: "Phục hồi răng sâu, mẻ bằng vật liệu nha khoa an toàn.", price: 350000 },
-    { _id: "fallback-service-3", name: "Tẩy trắng răng", description: "Cải thiện màu răng với quy trình chuyên nghiệp tại phòng khám.", price: 1200000 }
-  ];
+  const visibleServices = services.slice(0, 5);
   const recentReviews = reviews.slice(0, 4);
 
   return (
@@ -304,6 +300,9 @@ function PatientHome({ activeAppointments, dentistOptions, nextAppointment, noti
               {service.price ? <strong>{formatMoney(service.price)}</strong> : <strong>Liên hệ tư vấn</strong>}
             </article>
           ))}
+          {!visibleServices.length && (
+            <p className="muted">Chưa có dịch vụ đang hoạt động trong hệ thống.</p>
+          )}
         </div>
       </section>
 
@@ -314,8 +313,8 @@ function PatientHome({ activeAppointments, dentistOptions, nextAppointment, noti
         </div>
         <div className="patient-about-grid">
           <article>
-            <strong>{dentistOptions.length || 3}</strong>
-            <p>{dentistOptions.length || 3} bác sĩ phụ trách khám, tư vấn và theo dõi điều trị.</p>
+            <strong>{dentistOptions.length}</strong>
+            <p>{dentistOptions.length} bác sĩ phụ trách khám, tư vấn và theo dõi điều trị.</p>
           </article>
           <article>
             <strong>{records.length}</strong>

@@ -348,5 +348,5 @@ export async function rescheduleAppointmentFromSlot({ appointment, serviceId, da
   appointment.endAt = selected.endAt;
   appointment.arrivalAt = selected.arrivalAt;
   appointment.status = "scheduled";
-  return appointment.save();
+  return schedulingRepository.saveAppointment(appointment);
 }

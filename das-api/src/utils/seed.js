@@ -1,33 +1,14 @@
-import mongoose from "mongoose";
-import { connectMongoDB } from "../config/mongodb.js";
+import {
+  closeMongoDB,
+  connectMongoDB,
+  getCollection
+} from "../config/mongodb.js";
 import { getInheritanceChain, ROLE_HIERARCHY } from "../config/roleHierarchy.js";
-import AdminProfile from "../models/AdminProfile.js";
-import Appointment from "../models/Appointment.js";
-import AppointmentSlot from "../models/AppointmentSlot.js";
-import ClinicRoom from "../models/ClinicRoom.js";
-import ClinicWorkingHour from "../models/ClinicWorkingHour.js";
-import ConsultationRequest from "../models/ConsultationRequest.js";
-import DentalService from "../models/DentalService.js";
-import Dentist from "../models/Dentist.js";
-import DentistService from "../models/DentistService.js";
-import Invoice from "../models/Invoice.js";
-import Notification from "../models/Notification.js";
-import Nurse from "../models/Nurse.js";
-import Patient from "../models/Patient.js";
-import Payment from "../models/Payment.js";
-import Prescription from "../models/Prescription.js";
-import Receptionist from "../models/Receptionist.js";
-import Review from "../models/Review.js";
-import Role from "../models/Role.js";
-import RoomStatus from "../models/RoomStatus.js";
-import StaffSchedule from "../models/StaffSchedule.js";
-import TimeSlot from "../models/TimeSlot.js";
-import TreatmentPlan from "../models/TreatmentPlan.js";
-import TreatmentRecord from "../models/TreatmentRecord.js";
-import User from "../models/User.js";
+import { COLLECTIONS } from "../models/collections.js";
+import { insertDocuments } from "../repository/mongoRepository.js";
 import { createAppointmentFromSlot } from "../services/schedulingService.js";
-import { isWorkingDate, toDateInputValue } from "../utils/time.js";
-import { hashPassword } from "../utils/password.js";
+import { hashPassword } from "./password.js";
+import { isWorkingDate, toDateInputValue } from "./time.js";
 
 function nextWorkingDates(count, offsetDays = 1) {
   const dates = [];
@@ -36,68 +17,30 @@ function nextWorkingDates(count, offsetDays = 1) {
 
   while (dates.length < count) {
     const dateText = toDateInputValue(date);
-    if (isWorkingDate(dateText)) {
-      dates.push(dateText);
-    }
+    if (isWorkingDate(dateText)) dates.push(dateText);
     date.setDate(date.getDate() + 1);
   }
-
   return dates;
 }
 
 async function clearDatabase() {
-  await Promise.all([
-    AdminProfile.deleteMany({}),
-    Appointment.deleteMany({}),
-    AppointmentSlot.deleteMany({}),
-    ClinicRoom.deleteMany({}),
-    ClinicWorkingHour.deleteMany({}),
-    ConsultationRequest.deleteMany({}),
-    DentalService.deleteMany({}),
-    Dentist.deleteMany({}),
-    DentistService.deleteMany({}),
-    Invoice.deleteMany({}),
-    Notification.deleteMany({}),
-    Nurse.deleteMany({}),
-    Patient.deleteMany({}),
-    Payment.deleteMany({}),
-    Prescription.deleteMany({}),
-    Receptionist.deleteMany({}),
-    Review.deleteMany({}),
-    Role.deleteMany({}),
-    RoomStatus.deleteMany({}),
-    StaffSchedule.deleteMany({}),
-    TimeSlot.deleteMany({}),
-    TreatmentPlan.deleteMany({}),
-    TreatmentRecord.deleteMany({}),
-    User.deleteMany({})
-  ]);
+  await Promise.all(
+    Object.values(COLLECTIONS).map((collectionName) =>
+      getCollection(collectionName).deleteMany({})
+    )
+  );
 }
 
 async function createRoles() {
-  const roles = {};
-  for (const [roleName, config] of Object.entries(ROLE_HIERARCHY)) {
-    roles[roleName] = await Role.create({
-      roleName,
-      parentRoleName: config.parent,
-      isAbstract: config.abstract,
-      inheritanceChain: getInheritanceChain(roleName),
-      description: config.description
-    });
-  }
-  return roles;
-}
-
-async function createUser({ fullName, email, phone, role, roleRef, passwordHash, extra = {} }) {
-  return User.create({
-    fullName,
-    email,
-    phone,
-    role,
-    roleRef,
-    passwordHash,
-    ...extra
-  });
+  const roleDocuments = Object.entries(ROLE_HIERARCHY).map(([roleName, config]) => ({
+    roleName,
+    parentRoleName: config.parent,
+    isAbstract: config.abstract,
+    inheritanceChain: getInheritanceChain(roleName),
+    description: config.description
+  }));
+  const createdRoles = await insertDocuments(COLLECTIONS.roles, roleDocuments);
+  return Object.fromEntries(createdRoles.map((role) => [role.roleName, role]));
 }
 
 async function createWorkingCalendar() {
@@ -120,21 +63,19 @@ async function createWorkingCalendar() {
       }
     );
   }
-  await ClinicWorkingHour.create(workingHours);
-
-  return TimeSlot.create([
+  await insertDocuments(COLLECTIONS.clinicWorkingHours, workingHours);
+  return insertDocuments(COLLECTIONS.timeSlots, [
     { slotName: "Ca sáng", startTime: "08:00", endTime: "11:30" },
     { slotName: "Ca chiều", startTime: "14:00", endTime: "17:30" }
   ]);
 }
 
-const seedDentistProfiles = [
+const dentistProfiles = [
   {
     fullName: "BS. Nguyễn Minh Anh",
     email: "dentist1@das.local",
     phone: "0902000001",
     yearsOfExperience: 9,
-    qualification: "Bác sĩ Răng Hàm Mặt",
     bio: "Có kinh nghiệm thăm khám, tư vấn kế hoạch điều trị và theo dõi tiến trình chăm sóc răng miệng cho bệnh nhân.",
     licenseNo: "DAS-DEN-001",
     avatarUrl: "/assets/doctors/doctor-minh-anh.png"
@@ -144,7 +85,6 @@ const seedDentistProfiles = [
     email: "dentist2@das.local",
     phone: "0902000002",
     yearsOfExperience: 12,
-    qualification: "Bác sĩ Răng Hàm Mặt",
     bio: "Phụ trách thăm khám, tư vấn phương án điều trị phù hợp và phối hợp cùng đội ngũ lâm sàng trong từng ca khám.",
     licenseNo: "DAS-DEN-002",
     avatarUrl: "/assets/doctors/doctor-hoang-nam.png"
@@ -154,91 +94,101 @@ const seedDentistProfiles = [
     email: "dentist3@das.local",
     phone: "0902000003",
     yearsOfExperience: 7,
-    qualification: "Bác sĩ Răng Hàm Mặt",
     bio: "Tập trung vào trải nghiệm thăm khám nhẹ nhàng, giải thích rõ kế hoạch điều trị và hướng dẫn chăm sóc sau khám.",
     licenseNo: "DAS-DEN-003",
     avatarUrl: "/assets/doctors/doctor-thanh-vy.png"
   }
 ];
 
-async function run() {
-  await connectMongoDB();
-  await clearDatabase();
-
-  const passwordHash = await hashPassword("Password123!");
-  const roles = await createRoles();
-  const timeSlots = await createWorkingCalendar();
-
-  const admin = await createUser({
+async function seedUsers(roles, passwordHash) {
+  const admin = await insertDocuments(COLLECTIONS.users, {
     fullName: "Quản trị DAS",
     email: "admin@das.local",
     phone: "0900000000",
     role: "admin",
     roleRef: roles.admin._id,
+    status: "active",
+    gender: "unknown",
     passwordHash
   });
-  await AdminProfile.create({
+  await insertDocuments(COLLECTIONS.adminProfiles, {
     user: admin._id,
     position: "Quản trị hệ thống phòng khám",
-    permissionLevel: "super_admin"
+    permissionLevel: "super_admin",
+    status: "active"
   });
 
-  const receptionists = await User.create(
-    Array.from({ length: 4 }).map((_, index) => ({
+  const receptionists = await insertDocuments(
+    COLLECTIONS.users,
+    Array.from({ length: 4 }, (_, index) => ({
       fullName: `Lễ tân ${index + 1}`,
       email: `receptionist${index + 1}@das.local`,
       phone: `090100000${index + 1}`,
       role: "receptionist",
       roleRef: roles.receptionist._id,
+      status: "active",
+      gender: "unknown",
       passwordHash
     }))
   );
-  await Receptionist.create(receptionists.map((user) => ({ user: user._id, status: "active" })));
+  await insertDocuments(
+    COLLECTIONS.receptionists,
+    receptionists.map((user) => ({ user: user._id, status: "active" }))
+  );
 
-  const dentists = await User.create(
-    seedDentistProfiles.map((dentist) => ({
-      fullName: dentist.fullName,
-      email: dentist.email,
-      phone: dentist.phone,
+  const dentists = await insertDocuments(
+    COLLECTIONS.users,
+    dentistProfiles.map((dentist) => ({
+      ...dentist,
       role: "dentist",
       roleRef: roles.dentist._id,
-      yearsOfExperience: dentist.yearsOfExperience,
-      bio: dentist.bio,
-      licenseNo: dentist.licenseNo,
-      avatarUrl: dentist.avatarUrl,
+      status: "active",
+      gender: "unknown",
       passwordHash
     }))
   );
-  await Dentist.create(
+  await insertDocuments(
+    COLLECTIONS.dentists,
     dentists.map((user, index) => ({
       user: user._id,
-      qualification: seedDentistProfiles[index].qualification,
-      experienceYears: seedDentistProfiles[index].yearsOfExperience,
-      description: seedDentistProfiles[index].bio,
+      qualification: "Bác sĩ Răng Hàm Mặt",
+      experienceYears: dentistProfiles[index].yearsOfExperience,
+      description: dentistProfiles[index].bio,
       status: "active"
     }))
   );
 
-  const nurses = await User.create(
-    Array.from({ length: 8 }).map((_, index) => ({
+  const nurses = await insertDocuments(
+    COLLECTIONS.users,
+    Array.from({ length: 8 }, (_, index) => ({
       fullName: `Y tá ${index + 1}`,
       email: `nurse${index + 1}@das.local`,
       phone: `090300000${index + 1}`,
       role: "nurse",
       roleRef: roles.nurse._id,
+      status: "active",
+      gender: "unknown",
       yearsOfExperience: 2 + index,
       passwordHash
     }))
   );
-  await Nurse.create(nurses.map((user) => ({ user: user._id, qualification: "Y tá đã đăng ký", status: "active" })));
+  await insertDocuments(
+    COLLECTIONS.nurses,
+    nurses.map((user) => ({
+      user: user._id,
+      qualification: "Y tá đã đăng ký",
+      status: "active"
+    }))
+  );
 
-  const patients = await User.create([
+  const patients = await insertDocuments(COLLECTIONS.users, [
     {
       fullName: "Bệnh nhân 1",
       email: "patient1@das.local",
       phone: "0911000001",
       role: "patient",
       roleRef: roles.patient._id,
+      status: "active",
       gender: "unknown",
       address: "Quận 1",
       passwordHash
@@ -249,12 +199,13 @@ async function run() {
       phone: "0911000002",
       role: "patient",
       roleRef: roles.patient._id,
+      status: "active",
       gender: "unknown",
       address: "Quận 3",
       passwordHash
     }
   ]);
-  await Patient.create([
+  await insertDocuments(COLLECTIONS.patients, [
     {
       user: patients[0]._id,
       gender: "unknown",
@@ -269,14 +220,20 @@ async function run() {
     }
   ]);
 
-  const services = await DentalService.create([
+  return { admin, receptionists, dentists, nurses, patients };
+}
+
+async function seedClinic(dentists, nurses, timeSlots) {
+  const services = await insertDocuments(COLLECTIONS.dentalServices, [
     {
       name: "Trám răng",
       description: "Điều trị sâu răng giá cố định, thanh toán khi bệnh nhân đến khám.",
       durationMinutes: 30,
       transitionTime: 10,
       price: 300000,
-      requiresPrepayment: true
+      requiresPrepayment: true,
+      isConsultation: false,
+      isActive: true
     },
     {
       name: "Nhổ răng khôn",
@@ -284,7 +241,9 @@ async function run() {
       durationMinutes: 60,
       transitionTime: 10,
       price: 1500000,
-      requiresPrepayment: true
+      requiresPrepayment: true,
+      isConsultation: false,
+      isActive: true
     },
     {
       name: "Tư vấn nha khoa",
@@ -293,7 +252,8 @@ async function run() {
       transitionTime: 10,
       price: 0,
       requiresPrepayment: false,
-      isConsultation: true
+      isConsultation: true,
+      isActive: true
     },
     {
       name: "Cạo vôi răng",
@@ -301,7 +261,9 @@ async function run() {
       durationMinutes: 30,
       transitionTime: 10,
       price: 250000,
-      requiresPrepayment: true
+      requiresPrepayment: true,
+      isConsultation: false,
+      isActive: true
     },
     {
       name: "Tẩy trắng răng",
@@ -309,41 +271,51 @@ async function run() {
       durationMinutes: 45,
       transitionTime: 10,
       price: 1200000,
-      requiresPrepayment: true
+      requiresPrepayment: true,
+      isConsultation: false,
+      isActive: true
     }
   ]);
 
-  await DentistService.create(
+  await insertDocuments(
+    COLLECTIONS.dentistServices,
     dentists.flatMap((dentist) =>
-      services.map((service) => ({
-        dentist: dentist._id,
-        service: service._id
-      }))
+      services.map((service) => ({ dentist: dentist._id, service: service._id }))
     )
   );
 
-  const rooms = await ClinicRoom.create(
+  const rooms = await insertDocuments(
+    COLLECTIONS.clinicRooms,
     dentists.map((dentist, index) => ({
       name: `Phòng khám ${index + 1}`,
       roomType: "Phòng điều trị nha khoa",
       description: "Phòng được trang bị cho quy trình vận hành DAS.",
       assignedDentist: dentist._id,
-      equipment: ["Máy chụp X-quang", "Máy đo huyết áp", "Máy đo SpO2", "Nhiệt kế", "Máy theo dõi hô hấp"],
-      status: "available"
+      equipment: [
+        "Máy chụp X-quang",
+        "Máy đo huyết áp",
+        "Máy đo SpO2",
+        "Nhiệt kế",
+        "Máy theo dõi hô hấp"
+      ],
+      status: "available",
+      isActive: true
     }))
   );
 
-  await RoomStatus.create(
+  await insertDocuments(
+    COLLECTIONS.roomStatuses,
     rooms.map((room, index) => ({
       room: room._id,
       nurse: nurses[index % nurses.length]._id,
       availabilityStatus: "available",
-      note: "Trạng thái phòng ban đầu từ dữ liệu mẫu ERD."
+      note: "Trạng thái phòng ban đầu từ dữ liệu mẫu."
     }))
   );
 
-  const workingDates = nextWorkingDates(12, 1);
-  await StaffSchedule.create(
+  const workingDates = nextWorkingDates(12);
+  await insertDocuments(
+    COLLECTIONS.staffSchedules,
     workingDates.flatMap((dateText) => {
       const workDate = new Date(`${dateText}T00:00:00`);
       const dentistSchedules = rooms.flatMap((room, roomIndex) =>
@@ -371,7 +343,14 @@ async function run() {
     })
   );
 
+  return { services, rooms, workingDates };
+}
+
+async function seedOperationalData(users, clinic) {
+  const { receptionists, patients } = users;
+  const { services, workingDates } = clinic;
   const date = workingDates[0];
+
   const firstAppointment = await createAppointmentFromSlot({
     requester: receptionists[0],
     patientId: patients[0]._id,
@@ -380,7 +359,6 @@ async function run() {
     channel: "offline",
     note: "Lịch mẫu cho bảng lễ tân."
   });
-
   const consultationAppointment = await createAppointmentFromSlot({
     requester: patients[1],
     patientId: patients[1]._id,
@@ -390,7 +368,7 @@ async function run() {
     note: "Lịch tư vấn trực tuyến mẫu."
   });
 
-  const invoice = await Invoice.create({
+  const invoice = await insertDocuments(COLLECTIONS.invoices, {
     appointment: firstAppointment._id,
     patient: patients[0]._id,
     items: [{ name: services[0].name, amount: services[0].price }],
@@ -399,15 +377,15 @@ async function run() {
     invoiceDate: new Date(),
     status: "unpaid"
   });
-
-  await Payment.create({
+  await insertDocuments(COLLECTIONS.payments, {
     invoice: invoice._id,
     paymentMethod: "cash",
     amount: 0,
-    paymentStatus: "pending"
+    paymentStatus: "pending",
+    paymentDate: new Date()
   });
 
-  const treatmentRecord = await TreatmentRecord.create({
+  const treatmentRecord = await insertDocuments(COLLECTIONS.treatmentRecords, {
     appointment: consultationAppointment._id,
     patient: patients[1]._id,
     dentist: consultationAppointment.dentist,
@@ -417,8 +395,7 @@ async function run() {
     treatmentDate: new Date(),
     status: "draft"
   });
-
-  await TreatmentPlan.create({
+  await insertDocuments(COLLECTIONS.treatmentPlans, {
     treatmentRecord: treatmentRecord._id,
     dentist: consultationAppointment.dentist,
     planDetail: "Tái khám và lập dự toán điều trị chi tiết.",
@@ -426,8 +403,7 @@ async function run() {
     startDate: new Date(),
     status: "draft"
   });
-
-  await Prescription.create({
+  await insertDocuments(COLLECTIONS.prescriptions, {
     treatmentRecord: treatmentRecord._id,
     dentist: consultationAppointment.dentist,
     medicineName: "Thuốc giảm đau khi cần",
@@ -435,18 +411,17 @@ async function run() {
     instruction: "Chỉ dùng khi đau trước buổi tái khám.",
     note: "Đơn thuốc mẫu."
   });
-
-  await ConsultationRequest.create({
+  await insertDocuments(COLLECTIONS.consultationRequests, {
     fullName: "Khách tư vấn",
     phone: "0988000001",
     email: "guest@example.com",
     service: services[2]._id,
     preferredDate: new Date(`${date}T00:00:00`),
     preferredTime: "14:00",
-    message: "Muốn tư vấn đau răng trước khi đặt lịch."
+    message: "Muốn tư vấn đau răng trước khi đặt lịch.",
+    status: "new"
   });
-
-  await Notification.create([
+  await insertDocuments(COLLECTIONS.notifications, [
     {
       user: patients[0]._id,
       title: "Đã tạo lịch hẹn",
@@ -460,11 +435,21 @@ async function run() {
       isRead: false
     }
   ]);
-
-  await mongoose.disconnect();
 }
 
-run().catch(async (_error) => {
-  await mongoose.disconnect();
-  process.exit(1);
+async function run() {
+  await connectMongoDB();
+  await clearDatabase();
+  const passwordHash = await hashPassword("Password123!");
+  const roles = await createRoles();
+  const timeSlots = await createWorkingCalendar();
+  const users = await seedUsers(roles, passwordHash);
+  const clinic = await seedClinic(users.dentists, users.nurses, timeSlots);
+  await seedOperationalData(users, clinic);
+  await closeMongoDB();
+}
+
+run().catch(async (error) => {
+  await closeMongoDB();
+  throw error;
 });

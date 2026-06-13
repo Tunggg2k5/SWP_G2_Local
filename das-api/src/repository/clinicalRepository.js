@@ -1,11 +1,15 @@
-import Appointment from "../models/Appointment.js";
-import ClinicRoom from "../models/ClinicRoom.js";
-import DentalService from "../models/DentalService.js";
-import Notification from "../models/Notification.js";
-import RoomStatus from "../models/RoomStatus.js";
-import StaffSchedule from "../models/StaffSchedule.js";
-import TreatmentPlan from "../models/TreatmentPlan.js";
-import TreatmentRecord from "../models/TreatmentRecord.js";
+import { getCollection, toObjectId } from "../config/mongodb.js";
+import { COLLECTIONS } from "../models/collections.js";
+import {
+  findById,
+  findMany,
+  findOne,
+  insertDocuments,
+  normalizeIdFields,
+  populate,
+  updateById,
+  updateOneAndReturn
+} from "./mongoRepository.js";
 
 const clinicalAppointmentPopulate = [
   { path: "patient", select: "fullName phone email" },
@@ -23,130 +27,195 @@ const treatmentRecordPopulate = [
 ];
 
 const patientHistoryPopulate = [
-  { path: "appointment", populate: [{ path: "service", select: "name" }, { path: "room", select: "name" }] },
+  {
+    path: "appointment",
+    populate: [
+      { path: "service", select: "name" },
+      { path: "room", select: "name" }
+    ]
+  },
   { path: "patient", select: "fullName phone email" },
   { path: "dentist", select: "fullName" },
   { path: "nurse", select: "fullName" }
 ];
 
-const treatmentPlanPopulate = {
-  path: "treatmentRecord",
-  populate: [
-    { path: "appointment", populate: [{ path: "service", select: "name" }, { path: "patient", select: "fullName phone" }] },
-    { path: "patient", select: "fullName phone" }
-  ]
-};
+const treatmentPlanPopulate = [
+  {
+    path: "treatmentRecord",
+    populate: [
+      {
+        path: "appointment",
+        populate: [
+          { path: "service", select: "name" },
+          { path: "patient", select: "fullName phone" }
+        ]
+      },
+      { path: "patient", select: "fullName phone" }
+    ]
+  },
+  { path: "dentist", select: "fullName" }
+];
 
-export function findClinicalAppointments(query, limit = 120, lean = false) {
-  const appointmentQuery = Appointment.find(query).populate(clinicalAppointmentPopulate).sort({ startAt: 1 }).limit(limit);
-  return lean ? appointmentQuery.lean() : appointmentQuery;
+const appointmentIdFields = ["patient", "dentist", "nurse", "room", "service"];
+
+export async function findClinicalAppointments(query, limit = 120) {
+  const appointments = await findMany(
+    COLLECTIONS.appointments,
+    normalizeIdFields(query, appointmentIdFields),
+    { sort: { startAt: 1 }, limit }
+  );
+  await populate(appointments, clinicalAppointmentPopulate);
+  return appointments;
 }
 
-export function findClinicalTreatmentRecords(query, limit = 100, lean = false) {
-  const recordQuery = TreatmentRecord.find(query).populate(treatmentRecordPopulate).sort({ updatedAt: -1 }).limit(limit);
-  return lean ? recordQuery.lean() : recordQuery;
+export async function findClinicalTreatmentRecords(query, limit = 100) {
+  const records = await findMany(
+    COLLECTIONS.treatmentRecords,
+    normalizeIdFields(query, ["patient", "dentist", "nurse", "appointment"]),
+    { sort: { updatedAt: -1 }, limit }
+  );
+  await populate(records, treatmentRecordPopulate);
+  return records;
 }
 
-export function findClinicalRooms(lean = false) {
-  const roomQuery = ClinicRoom.find().populate("assignedDentist", "fullName").sort({ name: 1 });
-  return lean ? roomQuery.lean() : roomQuery;
+export async function findClinicalRooms() {
+  const rooms = await findMany(COLLECTIONS.clinicRooms, {}, { sort: { name: 1 } });
+  await populate(rooms, { path: "assignedDentist", select: "fullName" });
+  return rooms;
 }
 
 export function findActiveDentalServices() {
-  return DentalService.find({ isActive: true }).sort({ name: 1 }).lean();
+  return findMany(COLLECTIONS.dentalServices, { isActive: true }, { sort: { name: 1 } });
 }
 
-export function findStaffSchedules(query, limit = 60, lean = false) {
-  const scheduleQuery = StaffSchedule.find(query)
-    .populate([
-      { path: "timeSlot", select: "slotName startTime endTime" },
-      { path: "room", select: "name status" }
-    ])
-    .sort({ workDate: 1, startTime: 1 })
-    .limit(limit);
-  return lean ? scheduleQuery.lean() : scheduleQuery;
+export async function findStaffSchedules(query, limit = 60) {
+  const schedules = await findMany(
+    COLLECTIONS.staffSchedules,
+    normalizeIdFields(query, ["user", "timeSlot", "room"]),
+    { sort: { workDate: 1, startTime: 1 }, limit }
+  );
+  await populate(schedules, [
+    { path: "timeSlot", select: "slotName startTime endTime" },
+    { path: "room", select: "name status" }
+  ]);
+  return schedules;
 }
 
-export function hasRelatedAppointment(query) {
-  return Appointment.exists(query);
+export async function hasRelatedAppointment(query) {
+  const appointment = await findOne(
+    COLLECTIONS.appointments,
+    normalizeIdFields(query, appointmentIdFields),
+    "_id"
+  );
+  return Boolean(appointment);
 }
 
-export function findPatientAppointments(patientId) {
-  return Appointment.find({ patient: patientId })
-    .populate([
-      { path: "patient", select: "fullName phone email gender address" },
-      { path: "service", select: "name" },
-      { path: "dentist", select: "fullName" },
-      { path: "room", select: "name" }
-    ])
-    .sort({ startAt: -1 })
-    .limit(10)
-    .lean();
+export async function findPatientAppointments(patientId) {
+  const appointments = await findMany(
+    COLLECTIONS.appointments,
+    { patient: toObjectId(patientId) },
+    { sort: { startAt: -1 }, limit: 10 }
+  );
+  await populate(appointments, [
+    { path: "patient", select: "fullName phone email gender address" },
+    { path: "service", select: "name" },
+    { path: "dentist", select: "fullName" },
+    { path: "room", select: "name" }
+  ]);
+  return appointments;
 }
 
-export function findPatientTreatmentHistory(patientId) {
-  return TreatmentRecord.find({ patient: patientId })
-    .populate(patientHistoryPopulate)
-    .sort({ treatmentDate: -1, updatedAt: -1 })
-    .limit(50);
+export async function findPatientTreatmentHistory(patientId) {
+  const records = await findMany(
+    COLLECTIONS.treatmentRecords,
+    { patient: toObjectId(patientId) },
+    { sort: { treatmentDate: -1, updatedAt: -1 }, limit: 50 }
+  );
+  await populate(records, patientHistoryPopulate);
+  return records;
 }
 
 export function findAppointmentById(appointmentId) {
-  return Appointment.findById(appointmentId);
+  return findById(COLLECTIONS.appointments, appointmentId);
 }
 
-export function findAppointmentWithService(appointmentId) {
-  return Appointment.findById(appointmentId).populate("service", "name");
+export async function findAppointmentWithService(appointmentId) {
+  const appointment = await findAppointmentById(appointmentId);
+  await populate(appointment, { path: "service", select: "name" });
+  return appointment;
 }
 
 export function findAssignedDentistRoom(dentistId) {
-  return ClinicRoom.findOne({ assignedDentist: dentistId, isActive: true }).select("_id").lean();
+  return findOne(
+    COLLECTIONS.clinicRooms,
+    { assignedDentist: toObjectId(dentistId), isActive: true },
+    "_id"
+  );
 }
 
-export function upsertTreatmentRecord(appointmentId, update) {
-  return TreatmentRecord.findOneAndUpdate(
-    { appointment: appointmentId },
-    { $set: update },
-    { upsert: true, new: true, setDefaultsOnInsert: true }
-  ).populate([
+export async function upsertTreatmentRecord(appointmentId, update) {
+  const record = await updateOneAndReturn(
+    COLLECTIONS.treatmentRecords,
+    { appointment: toObjectId(appointmentId) },
+    { ...update, appointment: toObjectId(appointmentId) },
+    { upsert: true }
+  );
+  await populate(record, [
     { path: "appointment", populate: { path: "service", select: "name" } },
     { path: "patient", select: "fullName phone email" }
   ]);
+  return record;
 }
 
-export function upsertTreatmentPlan(treatmentRecordId, update, populateDentist = false) {
-  const planQuery = TreatmentPlan.findOneAndUpdate(
-    { treatmentRecord: treatmentRecordId },
-    update,
-    { upsert: true, new: true, setDefaultsOnInsert: true }
+export async function upsertTreatmentPlan(treatmentRecordId, update, populateDentist = false) {
+  const plan = await updateOneAndReturn(
+    COLLECTIONS.treatmentPlans,
+    { treatmentRecord: toObjectId(treatmentRecordId) },
+    { ...update, treatmentRecord: toObjectId(treatmentRecordId) },
+    { upsert: true }
   );
-  return populateDentist ? planQuery.populate("dentist", "fullName") : planQuery;
+  if (populateDentist) await populate(plan, { path: "dentist", select: "fullName" });
+  return plan;
 }
 
-export function findTreatmentPlans(query) {
-  return TreatmentPlan.find(query)
-    .populate(treatmentPlanPopulate)
-    .populate("dentist", "fullName")
-    .sort({ updatedAt: -1 })
-    .limit(100);
+export async function findTreatmentPlans(query) {
+  const plans = await findMany(
+    COLLECTIONS.treatmentPlans,
+    normalizeIdFields(query, ["treatmentRecord", "dentist"]),
+    { sort: { updatedAt: -1 }, limit: 100 }
+  );
+  await populate(plans, treatmentPlanPopulate);
+  return plans;
 }
 
 export function findTreatmentPlanById(planId) {
-  return TreatmentPlan.findById(planId);
+  return findById(COLLECTIONS.treatmentPlans, planId);
+}
+
+export function saveTreatmentPlan(plan) {
+  const update = { ...plan };
+  delete update._id;
+  if (update.treatmentRecord?._id) update.treatmentRecord = update.treatmentRecord._id;
+  if (update.dentist?._id) update.dentist = update.dentist._id;
+  return updateById(COLLECTIONS.treatmentPlans, plan._id, update);
 }
 
 export function updateTreatmentRecordPlan(recordId, planDetail) {
-  return TreatmentRecord.findByIdAndUpdate(recordId, { treatmentPlan: planDetail });
+  return updateById(COLLECTIONS.treatmentRecords, recordId, { treatmentPlan: planDetail });
 }
 
 export function updateRoomStatus(roomId, data) {
-  return ClinicRoom.findByIdAndUpdate(roomId, data, { new: true });
+  return updateById(COLLECTIONS.clinicRooms, roomId, data);
 }
 
 export function createRoomStatus(data) {
-  return RoomStatus.create(data);
+  return insertDocuments(COLLECTIONS.roomStatuses, data);
 }
 
 export function createNotification(data) {
-  return Notification.create(data);
+  return insertDocuments(COLLECTIONS.notifications, { isRead: false, ...data });
+}
+
+export function populateClinicalAppointment(appointment) {
+  return populate(appointment, clinicalAppointmentPopulate);
 }

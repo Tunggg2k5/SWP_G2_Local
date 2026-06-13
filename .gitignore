@@ -5,3 +5,15 @@ dist/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+node_modules/
+das-api/node_modules/
+das-web/node_modules/
+
+dist/
+das-web/dist/
+
+.env
+das-api/.env
+das-web/.env
+
+.DS_Store

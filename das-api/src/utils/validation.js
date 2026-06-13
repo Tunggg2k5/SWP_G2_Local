@@ -1,4 +1,4 @@
-import mongoose from "mongoose";
+import { ObjectId } from "mongodb";
 import { z } from "zod";
 
 const datePattern = /^\d{4}-\d{2}-\d{2}$/;
@@ -32,7 +32,7 @@ function todayStart() {
 export const objectIdSchema = z
   .string()
   .trim()
-  .refine((value) => mongoose.Types.ObjectId.isValid(value), "Mã dữ liệu không hợp lệ.");
+  .refine((value) => ObjectId.isValid(value), "Mã dữ liệu không hợp lệ.");
 
 export const optionalObjectIdSchema = z.preprocess(emptyToUndefined, objectIdSchema.optional());
 

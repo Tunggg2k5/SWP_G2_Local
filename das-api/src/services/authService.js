@@ -11,7 +11,7 @@ function httpError(message, statusCode = 400) {
 }
 
 function serializeUser(user) {
-  const object = user.toObject ? user.toObject() : { ...user };
+  const object = { ...user };
   delete object.passwordHash;
   delete object.resetPasswordCodeHash;
   delete object.resetPasswordExpiresAt;
@@ -34,7 +34,7 @@ async function ensurePatientRole() {
       parentRoleName: "user",
       isAbstract: false,
       inheritanceChain: getInheritanceChain("patient"),
-      description: "Benh nhan dat lich online, xem lich su kham, huy/doi lich va danh gia dich vu."
+      description: "Bệnh nhân đặt lịch trực tuyến, xem lịch sử khám, hủy hoặc dời lịch và đánh giá dịch vụ."
     }
   );
 }
@@ -43,12 +43,12 @@ export async function registerPatient(data) {
   const existing = await userRepository.findUserByPhone(data.phone);
 
   if (existing) {
-    throw httpError("So dien thoai da duoc dang ky.", 409);
+    throw httpError("Số điện thoại đã được đăng ký.", 409);
   }
 
   const patientRole = await ensurePatientRole();
   const user = await userRepository.createUser({
-    fullName: data.fullName || `Benh nhan ${data.phone}`,
+    fullName: data.fullName || `Bệnh nhân ${data.phone}`,
     email: phoneEmail(data.phone),
     phone: data.phone,
     gender: data.gender,
@@ -64,7 +64,7 @@ export async function registerPatient(data) {
   });
 
   return {
-    message: "Dang ky tai khoan thanh cong. Vui long dang nhap bang so dien thoai."
+    message: "Đăng ký tài khoản thành công. Vui lòng đăng nhập bằng số điện thoại."
   };
 }
 
@@ -72,11 +72,11 @@ export async function login(data) {
   const user = await userRepository.findUserByPhone(data.phone);
 
   if (!user || !(await comparePassword(data.password, user.passwordHash))) {
-    throw httpError("So dien thoai hoac mat khau khong dung.", 401);
+    throw httpError("Số điện thoại hoặc mật khẩu không đúng.", 401);
   }
 
   if (user.status !== "active") {
-    throw httpError("Tai khoan dang khong hoat dong.", 403);
+    throw httpError("Tài khoản đang không hoạt động.", 403);
   }
 
   return {
@@ -87,16 +87,18 @@ export async function login(data) {
 
 export async function requestPasswordReset(data) {
   const user = await userRepository.findUserByPhoneWithResetFields(data.phone);
-  const genericMessage = "Neu so dien thoai ton tai, he thong se tao ma xac minh de dat lai mat khau.";
+  const genericMessage = "Nếu số điện thoại tồn tại, hệ thống sẽ tạo mã xác minh để đặt lại mật khẩu.";
 
   if (!user) {
     return { message: genericMessage };
   }
 
   const verificationCode = generateVerificationCode();
-  user.resetPasswordCodeHash = await hashPassword(verificationCode);
-  user.resetPasswordExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
-  await user.save();
+  await userRepository.saveUser({
+    ...user,
+    resetPasswordCodeHash: await hashPassword(verificationCode),
+    resetPasswordExpiresAt: new Date(Date.now() + 10 * 60 * 1000)
+  });
 
   return {
     message: genericMessage,
@@ -108,20 +110,22 @@ export async function resetPassword(data) {
   const user = await userRepository.findUserByPhoneWithResetFields(data.phone);
 
   if (!user || !user.resetPasswordCodeHash || !user.resetPasswordExpiresAt || user.resetPasswordExpiresAt < new Date()) {
-    throw httpError("Ma xac minh khong hop le hoac da het han.", 400);
+    throw httpError("Mã xác minh không hợp lệ hoặc đã hết hạn.", 400);
   }
 
   const isValidCode = await comparePassword(data.verificationCode, user.resetPasswordCodeHash);
   if (!isValidCode) {
-    throw httpError("Ma xac minh khong hop le hoac da het han.", 400);
+    throw httpError("Mã xác minh không hợp lệ hoặc đã hết hạn.", 400);
   }
 
-  user.passwordHash = await hashPassword(data.newPassword);
-  user.resetPasswordCodeHash = undefined;
-  user.resetPasswordExpiresAt = undefined;
-  await user.save();
+  await userRepository.saveUser({
+    ...user,
+    passwordHash: await hashPassword(data.newPassword),
+    resetPasswordCodeHash: null,
+    resetPasswordExpiresAt: null
+  });
 
-  return { message: "Da dat lai mat khau. Vui long dang nhap bang mat khau moi." };
+  return { message: "Đã đặt lại mật khẩu. Vui lòng đăng nhập bằng mật khẩu mới." };
 }
 
 export function getCurrentUser(user) {
@@ -132,7 +136,7 @@ export async function updateProfile(user, data) {
   if (data.phone && data.phone !== user.phone) {
     const duplicate = await userRepository.findDuplicatePhone(data.phone, user._id);
     if (duplicate) {
-      throw httpError("So dien thoai da ton tai.", 409);
+      throw httpError("Số điện thoại đã tồn tại.", 409);
     }
   }
 
@@ -169,7 +173,7 @@ export async function markNotificationRead(user, notificationId) {
   const notification = await userRepository.markNotificationRead(user._id, notificationId);
 
   if (!notification) {
-    throw httpError("Khong tim thay thong bao.", 404);
+    throw httpError("Không tìm thấy thông báo.", 404);
   }
 
   return { notification };
@@ -179,15 +183,17 @@ export async function changePassword(user, data) {
   const storedUser = await userRepository.findUserByIdWithPassword(user._id);
 
   if (!(await comparePassword(data.currentPassword, storedUser.passwordHash))) {
-    throw httpError("Mat khau hien tai khong dung.", 400);
+    throw httpError("Mật khẩu hiện tại không đúng.", 400);
   }
 
-  storedUser.passwordHash = await hashPassword(data.newPassword);
-  await storedUser.save();
+  await userRepository.saveUser({
+    ...storedUser,
+    passwordHash: await hashPassword(data.newPassword)
+  });
 
-  return { message: "Da doi mat khau." };
+  return { message: "Đã đổi mật khẩu." };
 }
 
 export function logout() {
-  return { message: "Da dang xuat." };
+  return { message: "Đã đăng xuất." };
 }
