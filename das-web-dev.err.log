@@ -1,7 +1,0 @@
-npm error Lifecycle script `dev` failed with error:
-npm error code 1073807364
-npm error path C:\Users\ADMIN\Documents\DAS-Compass\das-web
-npm error workspace @das/das-web@1.0.0
-npm error location C:\Users\ADMIN\Documents\DAS-Compass\das-web
-npm error command failed
-npm error command C:\WINDOWS\system32\cmd.exe /d /s /c vite --host 0.0.0.0

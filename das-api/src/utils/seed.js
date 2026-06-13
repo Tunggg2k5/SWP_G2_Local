@@ -1,6 +1,5 @@
-import "dotenv/config";
 import mongoose from "mongoose";
-import { connectDB } from "../config/db.js";
+import { connectMongoDB } from "../config/mongodb.js";
 import { getInheritanceChain, ROLE_HIERARCHY } from "../config/roleHierarchy.js";
 import AdminProfile from "../models/AdminProfile.js";
 import Appointment from "../models/Appointment.js";
@@ -129,8 +128,41 @@ async function createWorkingCalendar() {
   ]);
 }
 
+const seedDentistProfiles = [
+  {
+    fullName: "BS. Nguyễn Minh Anh",
+    email: "dentist1@das.local",
+    phone: "0902000001",
+    yearsOfExperience: 9,
+    qualification: "Bác sĩ Răng Hàm Mặt",
+    bio: "Có kinh nghiệm thăm khám, tư vấn kế hoạch điều trị và theo dõi tiến trình chăm sóc răng miệng cho bệnh nhân.",
+    licenseNo: "DAS-DEN-001",
+    avatarUrl: "/assets/doctors/doctor-minh-anh.png"
+  },
+  {
+    fullName: "BS. Trần Hoàng Nam",
+    email: "dentist2@das.local",
+    phone: "0902000002",
+    yearsOfExperience: 12,
+    qualification: "Bác sĩ Răng Hàm Mặt",
+    bio: "Phụ trách thăm khám, tư vấn phương án điều trị phù hợp và phối hợp cùng đội ngũ lâm sàng trong từng ca khám.",
+    licenseNo: "DAS-DEN-002",
+    avatarUrl: "/assets/doctors/doctor-hoang-nam.png"
+  },
+  {
+    fullName: "BS. Lê Thanh Vy",
+    email: "dentist3@das.local",
+    phone: "0902000003",
+    yearsOfExperience: 7,
+    qualification: "Bác sĩ Răng Hàm Mặt",
+    bio: "Tập trung vào trải nghiệm thăm khám nhẹ nhàng, giải thích rõ kế hoạch điều trị và hướng dẫn chăm sóc sau khám.",
+    licenseNo: "DAS-DEN-003",
+    avatarUrl: "/assets/doctors/doctor-thanh-vy.png"
+  }
+];
+
 async function run() {
-  await connectDB(process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/das");
+  await connectMongoDB();
   await clearDatabase();
 
   const passwordHash = await hashPassword("Password123!");
@@ -164,26 +196,25 @@ async function run() {
   await Receptionist.create(receptionists.map((user) => ({ user: user._id, status: "active" })));
 
   const dentists = await User.create(
-    Array.from({ length: 8 }).map((_, index) => ({
-      fullName: `Bác sĩ ${index + 1}`,
-      email: `dentist${index + 1}@das.local`,
-      phone: `090200000${index + 1}`,
+    seedDentistProfiles.map((dentist) => ({
+      fullName: dentist.fullName,
+      email: dentist.email,
+      phone: dentist.phone,
       role: "dentist",
       roleRef: roles.dentist._id,
-      specialty: index % 2 === 0 ? "Nha khoa tổng quát và phục hình" : "Phẫu thuật răng miệng",
-      yearsOfExperience: 4 + index,
-      bio: "Bác sĩ phụ trách khám, tư vấn và điều trị nha khoa.",
-      licenseNo: `DAS-DEN-${String(index + 1).padStart(3, "0")}`,
+      yearsOfExperience: dentist.yearsOfExperience,
+      bio: dentist.bio,
+      licenseNo: dentist.licenseNo,
+      avatarUrl: dentist.avatarUrl,
       passwordHash
     }))
   );
   await Dentist.create(
     dentists.map((user, index) => ({
       user: user._id,
-      specialization: user.specialty,
-      qualification: "Bác sĩ Răng Hàm Mặt",
-      experienceYears: 4 + index,
-      description: user.bio,
+      qualification: seedDentistProfiles[index].qualification,
+      experienceYears: seedDentistProfiles[index].yearsOfExperience,
+      description: seedDentistProfiles[index].bio,
       status: "active"
     }))
   );
@@ -292,11 +323,11 @@ async function run() {
   );
 
   const rooms = await ClinicRoom.create(
-    Array.from({ length: 5 }).map((_, index) => ({
+    dentists.map((dentist, index) => ({
       name: `Phòng khám ${index + 1}`,
       roomType: "Phòng điều trị nha khoa",
       description: "Phòng được trang bị cho quy trình vận hành DAS.",
-      assignedDentist: dentists[index]._id,
+      assignedDentist: dentist._id,
       equipment: ["Máy chụp X-quang", "Máy đo huyết áp", "Máy đo SpO2", "Nhiệt kế", "Máy theo dõi hô hấp"],
       status: "available"
     }))
@@ -430,13 +461,10 @@ async function run() {
     }
   ]);
 
-  console.log("Đã seed xong dữ liệu theo ERD");
-  console.log("Mật khẩu demo: Password123!");
   await mongoose.disconnect();
 }
 
-run().catch(async (error) => {
-  console.error(error);
+run().catch(async (_error) => {
   await mongoose.disconnect();
   process.exit(1);
 });

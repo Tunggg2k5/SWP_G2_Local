@@ -1,5 +1,6 @@
 import { FileText } from "lucide-react";
 import EmptyState from "../EmptyState.jsx";
+import TreatmentRecordCard from "./TreatmentRecordCard.jsx";
 
 export default function PatientTreatmentRecords({ loading, records }) {
   return (
@@ -13,11 +14,7 @@ export default function PatientTreatmentRecords({ loading, records }) {
       ) : records.length ? (
         <div className="mini-list">
           {records.map((record) => (
-            <div className="record-card" key={record._id}>
-              <strong>{record.appointment?.service?.name}</strong>
-              <p>{record.diagnosis || "Chưa có chẩn đoán"}</p>
-              <span className="mini">{record.treatmentPlan || record.treatmentResult || "Chưa có kế hoạch điều trị"}</span>
-            </div>
+            <TreatmentRecordCard key={record._id} record={record} />
           ))}
         </div>
       ) : (

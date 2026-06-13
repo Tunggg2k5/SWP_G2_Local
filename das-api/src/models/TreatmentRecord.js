@@ -8,6 +8,7 @@ const treatmentRecordSchema = new mongoose.Schema(
     nurse: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     vitalSigns: {
       bloodPressure: String,
+      heartRate: String,
       spo2: String,
       temperature: String,
       respiratoryRate: String

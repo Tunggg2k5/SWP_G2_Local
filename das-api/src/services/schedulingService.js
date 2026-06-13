@@ -1,9 +1,4 @@
-import Appointment from "../models/Appointment.js";
-import AppointmentSlot from "../models/AppointmentSlot.js";
-import ClinicRoom from "../models/ClinicRoom.js";
-import DentalService from "../models/DentalService.js";
-import DentistService from "../models/DentistService.js";
-import User from "../models/User.js";
+import * as schedulingRepository from "../repository/schedulingRepository.js";
 import {
   WORKING_SESSIONS,
   APPOINTMENT_SLOT_MINUTES,
@@ -48,7 +43,7 @@ async function getAppointmentsForDate(date, excludeAppointmentId) {
     query._id = { $ne: excludeAppointmentId };
   }
 
-  return Appointment.find(query).sort({ startAt: 1 }).lean();
+  return schedulingRepository.findAppointments(query);
 }
 
 async function getPatientAppointmentsForDate(patientId, date, excludeAppointmentId) {
@@ -63,7 +58,7 @@ async function getPatientAppointmentsForDate(patientId, date, excludeAppointment
     query._id = { $ne: excludeAppointmentId };
   }
 
-  return Appointment.find(query).select("startAt endAt").sort({ startAt: 1 }).lean();
+  return schedulingRepository.findAppointments(query, "startAt endAt");
 }
 
 async function assertPatientHasNoTimeConflict(patientId, startAt, endAt, excludeAppointmentId, knownAppointments) {
@@ -82,9 +77,7 @@ async function assertPatientHasNoTimeConflict(patientId, startAt, endAt, exclude
     query._id = { $ne: excludeAppointmentId };
   }
 
-  const existing = await Appointment.findOne(query)
-    .select("startAt endAt")
-    .lean();
+  const existing = await schedulingRepository.findAppointmentConflict(query, "startAt endAt");
 
   if (existing) {
     throw httpError("Bệnh nhân đã có lịch hẹn trùng thời gian.", 409);
@@ -113,7 +106,7 @@ async function assertAppointmentResourcesAvailable({ patientId, dentistId, nurse
     query._id = { $ne: excludeAppointmentId };
   }
 
-  const conflict = await Appointment.findOne(query).select("room dentist nurse patient").lean();
+  const conflict = await schedulingRepository.findAppointmentConflict(query, "room dentist nurse patient");
   if (!conflict) return;
 
   if (sameId(conflict.patient, patientId)) {
@@ -135,21 +128,16 @@ export async function findAvailableSlots({ date, serviceId, excludeAppointmentId
     return [];
   }
 
-  const service = await DentalService.findById(serviceId).lean();
+  const service = await schedulingRepository.findServiceById(serviceId);
   if (!service || !service.isActive) {
     throw httpError("Không tìm thấy dịch vụ nha khoa.", 404);
   }
 
-  const dentistServices = await DentistService.find({ service: serviceId }).lean();
+  const dentistServices = await schedulingRepository.findDentistServicesByService(serviceId);
   const capableDentistIds = new Set(dentistServices.map((item) => item.dentist.toString()));
 
   const [rooms, appointments] = await Promise.all([
-    ClinicRoom.find({
-      isActive: true,
-      status: { $ne: "maintenance" }
-    })
-      .populate("assignedDentist", "fullName specialty yearsOfExperience bio email phone")
-      .lean(),
+    schedulingRepository.findActiveRoomsWithDentists(),
     getAppointmentsForDate(date, excludeAppointmentId)
   ]);
 
@@ -222,7 +210,7 @@ function uniqueAppointments(appointments) {
 
 async function selectAvailableNurse(startAt, endAt, date) {
   const [nurses, appointments] = await Promise.all([
-    User.find({ role: "nurse", status: "active" }).sort({ fullName: 1 }).lean(),
+    schedulingRepository.findActiveNurses(),
     getAppointmentsForDate(date)
   ]);
 
@@ -233,7 +221,7 @@ async function selectAvailableNurse(startAt, endAt, date) {
 }
 
 export async function createAppointmentFromSlot({ requester, patientId, serviceId, date, startAt, roomId, channel, note, dentistPreference = "selected" }) {
-  const patient = await User.findById(patientId).lean();
+  const patient = await schedulingRepository.findPatientById(patientId);
   if (!patient || patient.role !== "patient") {
     throw httpError("Không tìm thấy tài khoản bệnh nhân.", 404);
   }
@@ -255,7 +243,7 @@ export async function createAppointmentFromSlot({ requester, patientId, serviceI
   await assertPatientHasNoTimeConflict(patient._id, selected.startAt, selected.endAt, undefined, patientAppointments);
 
   const nurse = await selectAvailableNurse(selected.startAt, selected.endAt, date);
-  const service = await DentalService.findById(serviceId).lean();
+  const service = await schedulingRepository.findServiceById(serviceId);
   if (!canRequestBookedSlot) {
     await assertAppointmentResourcesAvailable({
       patientId: patient._id,
@@ -267,7 +255,7 @@ export async function createAppointmentFromSlot({ requester, patientId, serviceI
     });
   }
 
-  const appointmentSlot = await AppointmentSlot.create({
+  const appointmentSlot = await schedulingRepository.createAppointmentSlot({
     dentist: selected.dentist._id,
     room: selected.room._id,
     slotDate: selected.startAt,
@@ -277,7 +265,7 @@ export async function createAppointmentFromSlot({ requester, patientId, serviceI
   });
   const appointmentStatus = requester.role === "patient" || channel === "online" ? "pending" : "confirmed";
 
-  return Appointment.create({
+  return schedulingRepository.createAppointment({
     patient: patient._id,
     createdBy: requester._id,
     dentist: selected.dentist._id,
@@ -340,9 +328,9 @@ export async function rescheduleAppointmentFromSlot({ appointment, serviceId, da
   const nurse = await selectAvailableNurse(selected.startAt, selected.endAt, date);
 
   if (appointment.appointmentSlot) {
-    await AppointmentSlot.findByIdAndUpdate(appointment.appointmentSlot, { status: "cancelled" });
+    await schedulingRepository.updateAppointmentSlotStatus(appointment.appointmentSlot, "cancelled");
   }
-  const appointmentSlot = await AppointmentSlot.create({
+  const appointmentSlot = await schedulingRepository.createAppointmentSlot({
     dentist: selected.dentist._id,
     room: selected.room._id,
     slotDate: selected.startAt,

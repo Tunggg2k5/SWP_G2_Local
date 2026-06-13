@@ -1,7 +1,6 @@
 import { FileText } from "lucide-react";
 import EmptyState from "../EmptyState.jsx";
-import StatusBadge from "../StatusBadge.jsx";
-import { formatMoney } from "../../utils/format.js";
+import TreatmentPlanCard from "./TreatmentPlanCard.jsx";
 
 export default function PatientTreatmentPlans({ loading, treatmentPlans }) {
   return (
@@ -15,13 +14,7 @@ export default function PatientTreatmentPlans({ loading, treatmentPlans }) {
       ) : treatmentPlans.length ? (
         <div className="mini-list">
           {treatmentPlans.map((plan) => (
-            <div className="record-card" key={plan._id}>
-              <strong>{plan.treatmentRecord?.appointment?.service?.name || "Kế hoạch điều trị"}</strong>
-              <p>{plan.planDetail || plan.treatmentRecord?.treatmentPlan || "Chưa có mô tả kế hoạch."}</p>
-              <span className="mini">Bác sĩ: {plan.dentist?.fullName || plan.treatmentRecord?.dentist?.fullName || "-"}</span>
-              <span className="mini">Chi phí dự kiến: {formatMoney(plan.estimatedCost || 0)}</span>
-              <StatusBadge value={plan.status} />
-            </div>
+            <TreatmentPlanCard key={plan._id} plan={plan} />
           ))}
         </div>
       ) : (

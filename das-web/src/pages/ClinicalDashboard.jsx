@@ -1,12 +1,15 @@
 import { CalendarPlus, ClipboardPenLine, DoorOpen, FileText, Stethoscope } from "lucide-react";
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import EmptyState from "../components/EmptyState.jsx";
+import ClinicalTreatmentForm from "../components/clinical/ClinicalTreatmentForm.jsx";
+import ClinicalTreatmentHistory from "../components/clinical/ClinicalTreatmentHistory.jsx";
+import ClinicalWorkSchedule from "../components/clinical/ClinicalWorkSchedule.jsx";
+import FollowUpAppointmentForm from "../components/clinical/dentist/FollowUpAppointmentForm.jsx";
+import ClinicalRoomStatus from "../components/clinical/nurse/ClinicalRoomStatus.jsx";
 import Feedback from "../components/Feedback.jsx";
-import StatusBadge from "../components/StatusBadge.jsx";
 import { useAuth } from "../redux/AuthContext.jsx";
 import { api, getErrorMessage } from "../utils/api.js";
-import { formatDateTime, formatMoney, todayInput } from "../utils/format.js";
+import { todayInput } from "../utils/format.js";
 import { bookingSlotOptions, toClinicIso } from "./BookingPage.jsx";
 
 function getClinicalFeatures(role) {
@@ -236,301 +239,54 @@ export default function ClinicalDashboard() {
       <Feedback error={error} message={message} />
 
       {activeFeature === "schedule" && (
-        <section className="panel reception-schedule-panel clinical-schedule-panel">
-          <div className="section-title">
-            <Stethoscope size={20} />
-            <h2>Lịch khám trong ngày</h2>
-          </div>
-          <div className="clinical-schedule-toolbar">
-            <label className="field inline-field">
-              <span>Ngày</span>
-              <input type="date" value={date} onChange={(event) => setDate(event.target.value)} />
-            </label>
-            <div className="clinical-schedule-summary">
-              <strong>{appointments.length}</strong>
-              <span>lịch khám</span>
-            </div>
-          </div>
-
-          <div className="mini-list clinical-work-schedule-list">
-            {staffSchedules.length ? (
-              staffSchedules.map((schedule) => (
-                <div className="mini-row" key={schedule._id}>
-                  <span>Ca làm: {schedule.startTime} - {schedule.endTime}</span>
-                  <span>{schedule.room?.name || "Chưa gán phòng"}</span>
-                  <StatusBadge value={schedule.status} />
-                </div>
-              ))
-            ) : (
-              <div className="mini-row">
-                <span>Chưa có ca làm được phân công trong ngày này.</span>
-              </div>
-            )}
-          </div>
-
-          {loading ? (
-            <EmptyState title="Đang tải lịch khám" text="Hệ thống đang lấy dữ liệu mới nhất." />
-          ) : appointments.length && clinicalColumns.length ? (
-            <div className="reception-schedule-table-wrapper">
-              <div className="reception-schedule-grid clinical-schedule-grid" style={{ gridTemplateColumns: `74px repeat(${clinicalColumns.length}, minmax(250px, 1fr))` }}>
-                <div className="schedule-head schedule-index-head">STT</div>
-                {clinicalColumns.map((column) => (
-                  <div className="schedule-head" key={column._id}>
-                    <strong>{column.fullName}</strong>
-                    <span>{column.roomName || "Đang trực"}</span>
-                  </div>
-                ))}
-                {clinicalRows.map((row) => (
-                  <Fragment key={row.index}>
-                    <div className="schedule-time-cell">{row.index}</div>
-                    {row.cells.map((appointment, columnIndex) => (
-                      <div className="schedule-cell" key={`${row.index}-${clinicalColumns[columnIndex]._id}`}>
-                        {appointment ? (
-                          <article className={`schedule-cell-card ${isLockedAppointment(appointment) ? "locked" : ""}`}>
-                            <div>
-                              <strong>{appointment.patient?.fullName || "Bệnh nhân"}</strong>
-                              <span>{appointment.service?.name || "Dịch vụ"} / {appointment.room?.name || "Phòng khám"}</span>
-                              <small>Đến: {formatDateTime(appointment.arrivalAt || appointment.startAt)}</small>
-                            </div>
-                            <StatusBadge value={appointment.status} />
-                            <div className="row-actions schedule-status-actions">
-                              <button className="button small ghost" type="button" onClick={() => viewPatientHistory(appointment.patient?._id)}>
-                                Lịch sử
-                              </button>
-                              {canEditAppointment(user, appointment) && (
-                                <button className="button small" type="button" onClick={() => selectTreatmentAppointment(appointment)}>
-                                  Điều trị
-                                </button>
-                              )}
-                            </div>
-                          </article>
-                        ) : (
-                          <div className="schedule-empty-cell">Chưa có bệnh nhân</div>
-                        )}
-                      </div>
-                    ))}
-                  </Fragment>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <EmptyState title="Chưa có lịch khám" text="Lịch được check-in hoặc xếp trong ngày sẽ hiển thị tại đây." />
-          )}
-        </section>
+        <ClinicalWorkSchedule
+          appointments={appointments}
+          canEditAppointment={canEditAppointment}
+          clinicalColumns={clinicalColumns}
+          clinicalRows={clinicalRows}
+          date={date}
+          isLockedAppointment={isLockedAppointment}
+          loading={loading}
+          onDateChange={setDate}
+          onSelectTreatment={selectTreatmentAppointment}
+          onViewPatientHistory={viewPatientHistory}
+          staffSchedules={staffSchedules}
+          user={user}
+        />
       )}
 
       {activeFeature === "treatment" && (
-        <section className="panel clinical-treatment-panel">
-          <div className="section-title">
-            <ClipboardPenLine size={20} />
-            <h2>{user?.role === "dentist" ? "Quản lý kế hoạch điều trị" : "Cập nhật điều trị"}</h2>
-          </div>
-          <form className="stack" onSubmit={submitRecord}>
-            <label className="field">
-              <span>Lịch khám</span>
-              <select value={recordForm.appointmentId} onChange={(event) => updateRecord("appointmentId", event.target.value)}>
-                <option value="">Chọn lịch khám</option>
-                {appointments.map((appointment) => (
-                  <option key={appointment._id} value={appointment._id}>
-                    {appointment.patient?.fullName || "Bệnh nhân"} - {appointment.service?.name || "Dịch vụ"} - {formatDateTime(appointment.startAt)}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            {selectedAppointment && (
-              <div className="clinical-selected-card">
-                <strong>{selectedAppointment.patient?.fullName}</strong>
-                <span>{selectedAppointment.service?.name} / {selectedAppointment.room?.name}</span>
-                <StatusBadge value={selectedAppointment.status} />
-              </div>
-            )}
-
-            {user?.role === "nurse" ? (
-              <div className="form-grid">
-                <label className="field">
-                  <span>Huyết áp</span>
-                  <input value={recordForm.bloodPressure} onChange={(event) => updateRecord("bloodPressure", event.target.value)} />
-                </label>
-                <label className="field">
-                  <span>Nhá»‹p tim</span>
-                  <input value={recordForm.heartRate} onChange={(event) => updateRecord("heartRate", event.target.value)} />
-                </label>
-                <label className="field">
-                  <span>SpO2</span>
-                  <input value={recordForm.spo2} onChange={(event) => updateRecord("spo2", event.target.value)} />
-                </label>
-                <label className="field">
-                  <span>Nhiệt độ</span>
-                  <input value={recordForm.temperature} onChange={(event) => updateRecord("temperature", event.target.value)} />
-                </label>
-                <label className="field">
-                  <span>Nhịp thở</span>
-                  <input value={recordForm.respiratoryRate} onChange={(event) => updateRecord("respiratoryRate", event.target.value)} />
-                </label>
-                <label className="field wide">
-                  <span>Ghi chú hỗ trợ chẩn đoán</span>
-                  <textarea value={recordForm.treatmentNote} onChange={(event) => updateRecord("treatmentNote", event.target.value)} rows="3" />
-                </label>
-              </div>
-            ) : (
-              <>
-                <label className="field">
-                  <span>Chẩn đoán</span>
-                  <textarea value={recordForm.diagnosis} onChange={(event) => updateRecord("diagnosis", event.target.value)} rows="3" />
-                </label>
-                <label className="field">
-                  <span>Kế hoạch điều trị</span>
-                  <textarea value={recordForm.treatmentPlan} onChange={(event) => updateRecord("treatmentPlan", event.target.value)} rows="3" />
-                </label>
-                <div className="form-grid">
-                  <label className="field">
-                    <span>Chi phí dự kiến</span>
-                    <input type="number" min="0" value={recordForm.estimatedCost} onChange={(event) => updateRecord("estimatedCost", event.target.value)} />
-                  </label>
-                  <label className="field">
-                    <span>Kết quả điều trị</span>
-                    <input value={recordForm.treatmentResult} onChange={(event) => updateRecord("treatmentResult", event.target.value)} />
-                  </label>
-                </div>
-                <label className="field">
-                  <span>Ghi chú điều trị</span>
-                  <textarea value={recordForm.treatmentNote} onChange={(event) => updateRecord("treatmentNote", event.target.value)} rows="3" />
-                </label>
-              </>
-            )}
-            <div className="row-actions clinical-treatment-actions">
-              <button className="button primary">{user?.role === "nurse" ? "Lưu thông tin chung" : "Lưu điều trị"}</button>
-            </div>
-          </form>
-        </section>
+        <ClinicalTreatmentForm
+          appointments={appointments}
+          form={recordForm}
+          onChange={updateRecord}
+          onSubmit={submitRecord}
+          selectedAppointment={selectedAppointment}
+          user={user}
+        />
       )}
 
       {activeFeature === "followUp" && user?.role === "dentist" && (
-        <section className="panel clinical-followup-panel">
-          <div className="section-title">
-            <CalendarPlus size={20} />
-            <h2>Đặt lịch tái khám</h2>
-          </div>
-          <form className="form-grid" onSubmit={submitFollowUp}>
-            <label className="field wide">
-              <span>Bệnh nhân</span>
-              <select value={followUpForm.appointmentId} onChange={(event) => selectFollowUpAppointment(event.target.value)}>
-                <option value="">Chọn bệnh nhân từ lịch khám</option>
-                {appointments
-                  .filter((appointment) => canEditAppointment(user, appointment))
-                  .map((appointment) => (
-                    <option key={appointment._id} value={appointment._id}>
-                      {appointment.patient?.fullName || "Bệnh nhân"} - {appointment.service?.name || "Dịch vụ"}
-                    </option>
-                  ))}
-              </select>
-            </label>
-            <label className="field">
-              <span>Dịch vụ</span>
-              <select value={followUpForm.serviceId} onChange={(event) => updateFollowUp("serviceId", event.target.value)}>
-                <option value="">Chọn dịch vụ</option>
-                {services.map((service) => (
-                  <option key={service._id} value={service._id}>
-                    {service.name} - {formatMoney(service.price)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="field">
-              <span>Bác sĩ / phòng</span>
-              <select value={followUpForm.roomId} onChange={(event) => updateFollowUp("roomId", event.target.value)}>
-                <option value="">Chọn bác sĩ</option>
-                {rooms.map((room) => (
-                  <option key={room._id} value={room._id}>
-                    {room.assignedDentist?.fullName || room.name} - {room.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="field">
-              <span>Ngày tái khám</span>
-              <input type="date" min={todayInput()} value={followUpForm.date} onChange={(event) => updateFollowUp("date", event.target.value)} />
-            </label>
-            <label className="field">
-              <span>Giờ tái khám</span>
-              <select value={followUpForm.time} onChange={(event) => updateFollowUp("time", event.target.value)}>
-                {bookingSlotOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="field wide">
-              <span>Ghi chú</span>
-              <textarea value={followUpForm.note} onChange={(event) => updateFollowUp("note", event.target.value)} rows="3" />
-            </label>
-            {selectedFollowUpAppointment && (
-              <div className="clinical-selected-card wide">
-                <strong>{selectedFollowUpAppointment.patient?.fullName}</strong>
-                <span>Lịch gốc: {formatDateTime(selectedFollowUpAppointment.startAt)} / {selectedFollowUpAppointment.service?.name}</span>
-              </div>
-            )}
-            <button className="button primary">Đặt tái khám</button>
-          </form>
-        </section>
+        <FollowUpAppointmentForm
+          appointments={appointments}
+          canEditAppointment={canEditAppointment}
+          form={followUpForm}
+          onChange={updateFollowUp}
+          onSelectAppointment={selectFollowUpAppointment}
+          onSubmit={submitFollowUp}
+          rooms={rooms}
+          selectedAppointment={selectedFollowUpAppointment}
+          services={services}
+          user={user}
+        />
       )}
 
       {activeFeature === "records" && (
-        <section className="panel">
-          <div className="section-title">
-            <FileText size={20} />
-            <h2>Lịch sử điều trị</h2>
-          </div>
-          {loading ? (
-            <EmptyState title="Đang tải lịch sử" text="Hệ thống đang lấy dữ liệu mới nhất." />
-          ) : displayRecords.length ? (
-            <div className="mini-list">
-              {displayRecords.map((record) => (
-                <div className="record-card" key={record._id}>
-                  <strong>{record.patient?.fullName}</strong>
-                  <p>{record.diagnosis || "Chưa có chẩn đoán"}</p>
-                  <span className="mini">{record.treatmentPlan || "Chưa có kế hoạch điều trị"}</span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <EmptyState title="Chưa có lịch sử" text="Hồ sơ điều trị của bệnh nhân sẽ hiển thị tại đây." />
-          )}
-        </section>
+        <ClinicalTreatmentHistory loading={loading} records={displayRecords} />
       )}
 
       {activeFeature === "rooms" && user?.role === "nurse" && (
-        <section className="panel">
-          <div className="section-title">
-            <DoorOpen size={20} />
-            <h2>Cập nhật trạng thái phòng</h2>
-          </div>
-          <div className="room-grid">
-            {loading ? (
-              <EmptyState title="Đang tải phòng khám" text="Hệ thống đang lấy dữ liệu mới nhất." />
-            ) : rooms.length ? (
-              rooms.map((room) => (
-                <article className="room-card" key={room._id}>
-                  <h4>{room.name}</h4>
-                  <span className="mini">{room.assignedDentist?.fullName || "Chưa gán bác sĩ"}</span>
-                  <StatusBadge value={room.status} />
-                  <div className="row-actions">
-                    <button className="button small" onClick={() => setRoomStatus(room._id, "cleaning")}>
-                      Vệ sinh
-                    </button>
-                    <button className="button small" onClick={() => setRoomStatus(room._id, "available")}>
-                      Sẵn sàng
-                    </button>
-                  </div>
-                </article>
-              ))
-            ) : (
-              <EmptyState />
-            )}
-          </div>
-        </section>
+        <ClinicalRoomStatus loading={loading} onSetRoomStatus={setRoomStatus} rooms={rooms} />
       )}
     </div>
   );

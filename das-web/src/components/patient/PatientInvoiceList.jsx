@@ -1,7 +1,6 @@
 import { ReceiptText } from "lucide-react";
 import EmptyState from "../EmptyState.jsx";
-import StatusBadge from "../StatusBadge.jsx";
-import { formatDateTime, formatMoney } from "../../utils/format.js";
+import InvoiceCard from "./InvoiceCard.jsx";
 
 export default function PatientInvoiceList({ invoices, loading }) {
   return (
@@ -15,13 +14,7 @@ export default function PatientInvoiceList({ invoices, loading }) {
       ) : invoices.length ? (
         <div className="mini-list">
           {invoices.map((invoice) => (
-            <div className="record-card" key={invoice._id}>
-              <strong>{invoice.appointment?.service?.name || "Hóa đơn dịch vụ"}</strong>
-              <p>{formatMoney(invoice.total || invoice.totalAmount || 0)}</p>
-              <span className="mini">Ngày tạo: {formatDateTime(invoice.invoiceDate || invoice.createdAt)}</span>
-              <span className="mini">Lịch hẹn: {formatDateTime(invoice.appointment?.startAt)}</span>
-              <StatusBadge value={invoice.status} />
-            </div>
+            <InvoiceCard invoice={invoice} key={invoice._id} />
           ))}
         </div>
       ) : (

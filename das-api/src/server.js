@@ -1,18 +1,14 @@
-import "dotenv/config";
 import app from "./app.js";
-import { connectDB } from "./config/db.js";
+import { env } from "./config/environment.js";
+import { connectMongoDB } from "./config/mongodb.js";
 
-const port = process.env.PORT || 4000;
-const mongoUri = process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/das";
+async function startServer() {
+  await connectMongoDB();
+  app.listen(env.PORT);
+}
 
 try {
-  await connectDB(mongoUri);
-  console.log("MongoDB connected");
-
-  app.listen(port, () => {
-    console.log(`DAS API running on http://localhost:${port}`);
-  });
-} catch (error) {
-  console.error("Failed to start server:", error.message);
+  await startServer();
+} catch (_error) {
   process.exit(1);
 }

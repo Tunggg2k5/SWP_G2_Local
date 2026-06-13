@@ -1,12 +1,17 @@
-import { BarChart3, CalendarDays, DoorOpen, Download, KeyRound, Settings2, ShieldCheck, Star, UsersRound } from "lucide-react";
+import { BarChart3, CalendarDays, DoorOpen, Download, Settings2, Star, UsersRound } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
-import EmptyState from "../components/EmptyState.jsx";
+import AccountManagement from "../components/admin/AccountManagement.jsx";
+import AdminOverview from "../components/admin/AdminOverview.jsx";
+import AdminReportPanel from "../components/admin/AdminReportPanel.jsx";
+import AdminReviewList from "../components/admin/AdminReviewList.jsx";
+import ClinicWorkingHours from "../components/admin/ClinicWorkingHours.jsx";
+import ClinicRoomManagement from "../components/admin/ClinicRoomManagement.jsx";
+import DentalServiceManagement from "../components/admin/DentalServiceManagement.jsx";
+import StaffScheduleManagement from "../components/admin/StaffScheduleManagement.jsx";
 import Feedback from "../components/Feedback.jsx";
-import StatusBadge from "../components/StatusBadge.jsx";
 import { api, getErrorMessage } from "../utils/api.js";
-import { formatDateTime, formatMoney, todayInput } from "../utils/format.js";
-import { formatInheritanceChain, roleLabels } from "../utils/roles.js";
+import { todayInput } from "../utils/format.js";
 import { firstError, requireValue, validateDate, validateEmail, validateName, validateNote, validatePhone } from "../utils/validation.js";
 
 const adminFeatures = [
@@ -402,676 +407,85 @@ export default function AdminDashboard() {
     <div className="page-grid">
       <Feedback error={error} message={message} />
 
-      {activeFeature === "overview" && (
-        <>
-          {loading ? (
-            <section className="panel">
-              <EmptyState title="Đang tải thống kê" text="Hệ thống đang lấy dữ liệu mới nhất." />
-            </section>
-          ) : (
-            <section className="metrics-grid">
-              <Metric icon={BarChart3} label="Doanh thu" value={formatMoney(stats?.revenue || 0)} />
-              <Metric icon={UsersRound} label="Bệnh nhân" value={stats?.patientCount || 0} />
-              <Metric icon={ShieldCheck} label="Vắng mặt" value={stats?.noShowCount || 0} />
-              <Metric icon={Settings2} label="Đánh giá" value={Number(stats?.review?.average || 0).toFixed(1)} />
-              <Metric icon={UsersRound} label="Bệnh nhân mới" value={stats?.newPatientCount || 0} />
-              <Metric icon={UsersRound} label="Quay lại" value={stats?.returningPatientCount || 0} />
-            </section>
-          )}
-
-          <section className="panel">
-            <div className="section-title">
-              <ShieldCheck size={20} />
-              <h2>Vai trò hệ thống</h2>
-            </div>
-            {loading ? (
-              <EmptyState title="Đang tải phân quyền" text="Hệ thống đang lấy dữ liệu mới nhất." />
-            ) : (
-            <div className="inheritance-grid">
-              {roleHierarchy.map((role) => (
-                <article className="inheritance-card" key={role.role}>
-                  <strong>{role.label}</strong>
-                  <span>{formatInheritanceChain(role.inheritanceChain, role.label)}</span>
-                  <small>{role.abstract ? "Nhóm phân quyền" : `Hồ sơ: ${formatProfileCollection(role.profileCollection)}`}</small>
-                </article>
-              ))}
-            </div>
-            )}
-          </section>
-
-          <section className="panel">
-            <div className="section-title">
-              <Settings2 size={20} />
-              <h2>Dịch vụ được sử dụng nhiều</h2>
-            </div>
-            {stats?.serviceUsage?.length ? (
-              <div className="mini-list">
-                {stats.serviceUsage.map((item) => (
-                  <div className="mini-row" key={item._id || item.serviceName}>
-                    <span>{item.serviceName || "Dịch vụ"}</span>
-                    <strong>{item.count}</strong>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <EmptyState title="Chưa có dữ liệu dịch vụ" text="Dữ liệu sẽ xuất hiện khi có lịch hẹn." />
-            )}
-          </section>
-        </>
-      )}
+      {activeFeature === "overview" && <AdminOverview loading={loading} roleHierarchy={roleHierarchy} stats={stats} />}
 
       {activeFeature === "users" && (
-        <>
-          <section className="panel">
-            <div className="section-title">
-              <UsersRound size={20} />
-              <h2>Tạo tài khoản</h2>
-            </div>
-            <form className="form-grid" onSubmit={createUser}>
-              <label className="field">
-                <span>Họ tên</span>
-                <input value={userForm.fullName} onChange={(e) => setUserForm({ ...userForm, fullName: e.target.value })} required />
-              </label>
-              <label className="field">
-                <span>Email</span>
-                <input type="email" value={userForm.email} onChange={(e) => setUserForm({ ...userForm, email: e.target.value })} required />
-              </label>
-              <label className="field">
-                <span>Số điện thoại</span>
-                <input value={userForm.phone} onChange={(e) => setUserForm({ ...userForm, phone: e.target.value })} />
-              </label>
-              <label className="field">
-                <span>Vai trò</span>
-                <select value={userForm.role} onChange={(e) => setUserForm({ ...userForm, role: e.target.value })}>
-                  <option value="patient">Bệnh nhân</option>
-                  <option value="receptionist">Lễ tân</option>
-                  <option value="dentist">Bác sĩ</option>
-                  <option value="nurse">Y tá</option>
-                  <option value="admin">Quản trị viên</option>
-                </select>
-              </label>
-              <button className="button secondary">Tạo tài khoản</button>
-            </form>
-          </section>
-
-          <section className="panel">
-            <div className="section-title">
-              <UsersRound size={20} />
-              <h2>Tài khoản hệ thống</h2>
-            </div>
-            {loading ? (
-              <EmptyState title="Đang tải tài khoản" text="Hệ thống đang lấy dữ liệu mới nhất." />
-            ) : users.length ? (
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Tên</th>
-                      <th>Email</th>
-                      <th>Vai trò</th>
-                      <th>Phân quyền</th>
-                      <th>Trạng thái</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {users.map((user) => (
-                      <tr key={user._id}>
-                        <td>{user.fullName}</td>
-                        <td>{user.email}</td>
-                        <td>{roleLabels[user.role] || user.role}</td>
-                        <td>{formatInheritanceChain(user.inheritanceChain, user.role)}</td>
-                        <td>
-                          <StatusBadge value={user.status} />
-                        </td>
-                        <td>
-                          <div className="row-actions account-actions">
-                            <button className="button small ghost" type="button" onClick={() => resetUserPassword(user)} title="Đặt lại mật khẩu">
-                              <KeyRound size={15} />
-                              Đặt lại MK
-                            </button>
-                            <button
-                              className="button small"
-                              type="button"
-                              onClick={() => updateUserStatus(user._id, user.status === "active" ? "inactive" : "active")}
-                            >
-                              {user.status === "active" ? "Ngưng" : "Kích hoạt"}
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <EmptyState />
-            )}
-          </section>
-        </>
+        <AccountManagement
+          loading={loading}
+          onCreateUser={createUser}
+          onResetUserPassword={resetUserPassword}
+          onUpdateUserStatus={updateUserStatus}
+          onUserFormChange={(next) => setUserForm((current) => ({ ...current, ...next }))}
+          userForm={userForm}
+          users={users}
+        />
       )}
 
       {activeFeature === "services" && (
-        <>
-          <section className="panel">
-            <div className="section-title">
-              <Settings2 size={20} />
-              <h2>Thêm dịch vụ nha khoa</h2>
-            </div>
-            <form className="stack" onSubmit={createService}>
-              <label className="field">
-                <span>Tên dịch vụ</span>
-                <input value={serviceForm.name} onChange={(e) => setServiceForm({ ...serviceForm, name: e.target.value })} required />
-              </label>
-              <label className="field">
-                <span>Mô tả</span>
-                <textarea value={serviceForm.description} onChange={(e) => setServiceForm({ ...serviceForm, description: e.target.value })} rows="3" />
-              </label>
-              <div className="form-grid">
-                <label className="field">
-                  <span>Thời lượng</span>
-                  <input
-                    type="number"
-                    min="10"
-                    value={serviceForm.durationMinutes}
-                    onChange={(e) => setServiceForm({ ...serviceForm, durationMinutes: e.target.value })}
-                  />
-                </label>
-                <label className="field">
-                  <span>Giá</span>
-                  <input type="number" min="0" value={serviceForm.price} onChange={(e) => setServiceForm({ ...serviceForm, price: e.target.value })} />
-                </label>
-              </div>
-              <label className="check-field">
-                <input
-                  type="checkbox"
-                  checked={serviceForm.requiresPrepayment}
-                  onChange={(e) => setServiceForm({ ...serviceForm, requiresPrepayment: e.target.checked })}
-                />
-                <span>Thanh toán khi bệnh nhân đến khám</span>
-              </label>
-              <button className="button primary">Thêm dịch vụ</button>
-            </form>
-          </section>
-
-          <section className="panel">
-            <div className="section-title">
-              <Settings2 size={20} />
-              <h2>Dịch vụ</h2>
-            </div>
-            {loading ? (
-              <EmptyState title="Đang tải dịch vụ" text="Hệ thống đang lấy dữ liệu mới nhất." />
-            ) : (
-            <div className="mini-list">
-              {services.map((service) => (
-                <div className="mini-row" key={service._id}>
-                  <span>{service.name}</span>
-                  <span>{service.durationMinutes} phút</span>
-                  <span>{formatMoney(service.price)}</span>
-                  <StatusBadge value={service.isActive ? "active" : "inactive"} />
-                  <button
-                    className={`button small ${service.isActive ? "danger" : "secondary"}`}
-                    type="button"
-                    onClick={() => updateServiceActive(service, !service.isActive)}
-                  >
-                    {service.isActive ? "Ẩn" : "Khôi phục"}
-                  </button>
-                </div>
-              ))}
-            </div>
-            )}
-          </section>
-        </>
+        <DentalServiceManagement
+          loading={loading}
+          onCreateService={createService}
+          onServiceFormChange={(next) => setServiceForm((current) => ({ ...current, ...next }))}
+          onUpdateServiceActive={updateServiceActive}
+          serviceForm={serviceForm}
+          services={services}
+        />
       )}
 
       {activeFeature === "rooms" && (
-        <>
-          <section className="panel">
-            <div className="section-title">
-              <DoorOpen size={20} />
-              <h2>Tạo phòng khám</h2>
-            </div>
-            <form className="form-grid" onSubmit={createRoom}>
-              <label className="field">
-                <span>Tên phòng</span>
-                <input value={roomForm.name} onChange={(event) => setRoomForm({ ...roomForm, name: event.target.value })} required />
-              </label>
-              <label className="field">
-                <span>Bác sĩ phụ trách</span>
-                <select value={roomForm.assignedDentist} onChange={(event) => setRoomForm({ ...roomForm, assignedDentist: event.target.value })}>
-                  <option value="">Chưa gán</option>
-                  {dentistUsers.map((dentist) => (
-                    <option key={dentist._id} value={dentist._id}>
-                      {dentist.fullName}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="field">
-                <span>Trạng thái</span>
-                <select value={roomForm.status} onChange={(event) => setRoomForm({ ...roomForm, status: event.target.value })}>
-                  <option value="available">Sẵn sàng</option>
-                  <option value="maintenance">Bảo trì</option>
-                  <option value="unavailable">Tạm ngưng</option>
-                </select>
-              </label>
-              <label className="field wide">
-                <span>Mô tả</span>
-                <textarea value={roomForm.description} onChange={(event) => setRoomForm({ ...roomForm, description: event.target.value })} rows="3" />
-              </label>
-              <button className="button primary">Thêm phòng</button>
-            </form>
-          </section>
-
-          <section className="panel">
-            <div className="section-title">
-              <DoorOpen size={20} />
-              <h2>Phòng khám</h2>
-            </div>
-            <div className="mini-list">
-              {loading ? (
-                <EmptyState title="Đang tải phòng khám" text="Hệ thống đang lấy dữ liệu mới nhất." />
-              ) : rooms.map((room) => (
-                <div className="mini-row" key={room._id}>
-                  <span>{room.name}</span>
-                  <span>{room.assignedDentist?.fullName || "Chưa gán bác sĩ"}</span>
-                  <StatusBadge value={room.status} />
-                  <button className="button small" onClick={() => updateRoom(room._id, room.status === "maintenance" ? "available" : "maintenance")}>
-                    {room.status === "maintenance" ? "Mở" : "Bảo trì"}
-                  </button>
-                </div>
-              ))}
-            </div>
-          </section>
-        </>
+        <ClinicRoomManagement
+          dentistUsers={dentistUsers}
+          loading={loading}
+          onCreateRoom={createRoom}
+          onRoomFormChange={(next) => setRoomForm((current) => ({ ...current, ...next }))}
+          onUpdateRoom={updateRoom}
+          roomForm={roomForm}
+          rooms={rooms}
+        />
       )}
 
       {activeFeature === "workingHours" && (
-        <>
-          <section className="panel">
-            <div className="section-title">
-              <CalendarDays size={20} />
-              <h2>Quản lý giờ làm phòng khám</h2>
-            </div>
-            <form className="form-grid" onSubmit={createWorkingHour}>
-              <label className="field">
-                <span>Ngày trong tuần</span>
-                <select
-                  value={workingHourForm.dayOfWeek}
-                  onChange={(event) => setWorkingHourForm({ ...workingHourForm, dayOfWeek: event.target.value })}
-                >
-                  {Object.entries(dayNames).map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="field">
-                <span>Tên ca</span>
-                <input value={workingHourForm.shiftName} onChange={(event) => setWorkingHourForm({ ...workingHourForm, shiftName: event.target.value })} />
-              </label>
-              <label className="field">
-                <span>Bắt đầu</span>
-                <input
-                  type="time"
-                  value={workingHourForm.startTime}
-                  onChange={(event) => setWorkingHourForm({ ...workingHourForm, startTime: event.target.value })}
-                />
-              </label>
-              <label className="field">
-                <span>Kết thúc</span>
-                <input
-                  type="time"
-                  value={workingHourForm.endTime}
-                  onChange={(event) => setWorkingHourForm({ ...workingHourForm, endTime: event.target.value })}
-                />
-              </label>
-              <button className="button primary">Thêm giờ làm</button>
-            </form>
-          </section>
-
-          <section className="panel">
-            <div className="section-title">
-              <CalendarDays size={20} />
-              <h2>Ca làm hiện tại</h2>
-            </div>
-            {loading ? (
-              <EmptyState title="Đang tải giờ làm" text="Hệ thống đang lấy dữ liệu mới nhất." />
-            ) : workingHours.length ? (
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Ngày</th>
-                      <th>Ca</th>
-                      <th>Giờ</th>
-                      <th>Trạng thái</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {workingHours.map((item) => (
-                      <tr key={item._id}>
-                        <td>{dayNames[item.dayOfWeek]}</td>
-                        <td>{item.shiftName}</td>
-                        <td>
-                          {item.startTime} - {item.endTime}
-                        </td>
-                        <td>
-                          <StatusBadge value={item.status} />
-                        </td>
-                        <td>
-                          <button
-                            className="button small"
-                            onClick={() => toggleWorkingHour(item._id, item.status === "active" ? "inactive" : "active")}
-                          >
-                            {item.status === "active" ? "Tạm ngưng" : "Kích hoạt"}
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <EmptyState />
-            )}
-          </section>
-
-          <section className="panel">
-            <div className="section-title">
-              <CalendarDays size={20} />
-              <h2>Khung giờ dùng để xếp lịch</h2>
-            </div>
-            <div className="mini-list">
-              {loading ? (
-                <EmptyState title="Đang tải khung giờ" text="Hệ thống đang lấy dữ liệu mới nhất." />
-              ) : timeSlots.map((slot) => (
-                <div className="mini-row" key={slot._id}>
-                  <span>{formatTimeSlotName(slot.slotName)}</span>
-                  <span>
-                    {slot.startTime} - {slot.endTime}
-                  </span>
-                  <span>10 phút chuyển phòng</span>
-                </div>
-              ))}
-            </div>
-          </section>
-        </>
+        <ClinicWorkingHours
+          loading={loading}
+          onCreateWorkingHour={createWorkingHour}
+          onToggleWorkingHour={toggleWorkingHour}
+          onWorkingHourFormChange={(next) => setWorkingHourForm((current) => ({ ...current, ...next }))}
+          timeSlots={timeSlots}
+          workingHourForm={workingHourForm}
+          workingHours={workingHours}
+        />
       )}
 
       {activeFeature === "schedules" && (
-        <>
-          <section className="panel">
-            <div className="section-title">
-              <CalendarDays size={20} />
-              <h2>Quản lý lịch nhân sự</h2>
-            </div>
-            <form className="form-grid" onSubmit={createSchedule}>
-              <label className="field">
-                <span>Nhân sự</span>
-                <select value={scheduleForm.userId} onChange={(event) => setScheduleForm({ ...scheduleForm, userId: event.target.value })}>
-                  <option value="">Chọn nhân sự</option>
-                  {assignableUsers.map((user) => (
-                    <option key={user._id} value={user._id}>
-                      {user.fullName} - {roleLabels[user.role] || user.role}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="field">
-                <span>Phòng</span>
-                <select value={scheduleForm.roomId} onChange={(event) => setScheduleForm({ ...scheduleForm, roomId: event.target.value })}>
-                  <option value="">Không gán phòng</option>
-                  {rooms.map((room) => (
-                    <option key={room._id} value={room._id}>
-                      {room.name} - {room.status}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="field">
-                <span>Ngày làm</span>
-                <input type="date" value={scheduleForm.workDate} onChange={(event) => setScheduleForm({ ...scheduleForm, workDate: event.target.value })} />
-              </label>
-              <label className="field">
-                <span>Ca làm</span>
-                <select
-                  value={scheduleForm.timeSlotId}
-                  onChange={(event) => {
-                    const slot = timeSlots.find((item) => item._id === event.target.value);
-                    setScheduleForm({
-                      ...scheduleForm,
-                      timeSlotId: event.target.value,
-                      startTime: slot?.startTime || scheduleForm.startTime,
-                      endTime: slot?.endTime || scheduleForm.endTime
-                    });
-                  }}
-                >
-                  <option value="">Chọn ca</option>
-                  {timeSlots.map((slot) => (
-                    <option key={slot._id} value={slot._id}>
-                      {formatTimeSlotName(slot.slotName)} ({slot.startTime} - {slot.endTime})
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="field">
-                <span>Bắt đầu</span>
-                <input type="time" value={scheduleForm.startTime} onChange={(event) => setScheduleForm({ ...scheduleForm, startTime: event.target.value })} />
-              </label>
-              <label className="field">
-                <span>Kết thúc</span>
-                <input type="time" value={scheduleForm.endTime} onChange={(event) => setScheduleForm({ ...scheduleForm, endTime: event.target.value })} />
-              </label>
-              <button className="button primary">Tạo lịch</button>
-            </form>
-          </section>
-
-          <section className="panel">
-            <div className="section-title">
-              <CalendarDays size={20} />
-              <h2>Lịch làm việc</h2>
-            </div>
-            {!schedulesLoaded ? (
-              <EmptyState title="Đang tải lịch nhân sự" text="Hệ thống đang lấy dữ liệu mới nhất." />
-            ) : schedules.length ? (
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Ngày</th>
-                      <th>Nhân sự</th>
-                      <th>Vai trò</th>
-                      <th>Ca</th>
-                      <th>Phòng</th>
-                      <th>Trạng thái</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {schedules.map((schedule) => (
-                      <tr key={schedule._id}>
-                        <td>{formatDate(schedule.workDate)}</td>
-                        <td>{schedule.user?.fullName || "-"}</td>
-                        <td>{roleLabels[schedule.user?.role] || schedule.user?.role || "-"}</td>
-                        <td>
-                          {schedule.startTime} - {schedule.endTime}
-                        </td>
-                        <td>{schedule.room?.name || "-"}</td>
-                        <td>
-                          <StatusBadge value={schedule.status} />
-                        </td>
-                        <td>
-                          <div className="row-actions">
-                            <button className="button small" onClick={() => updateScheduleStatus(schedule._id, "completed")}>
-                              Hoàn tất
-                            </button>
-                            <button className="button small ghost" onClick={() => updateScheduleStatus(schedule._id, "off")}>
-                              Nghỉ
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <EmptyState />
-            )}
-          </section>
-        </>
+        <StaffScheduleManagement
+          assignableUsers={assignableUsers}
+          onCreateSchedule={createSchedule}
+          onScheduleFormChange={(next) => setScheduleForm((current) => ({ ...current, ...next }))}
+          onUpdateScheduleStatus={updateScheduleStatus}
+          rooms={rooms}
+          scheduleForm={scheduleForm}
+          schedules={schedules}
+          schedulesLoaded={schedulesLoaded}
+          timeSlots={timeSlots}
+        />
       )}
 
       {activeFeature === "reports" && (
-        <>
-          <section className="metrics-grid">
-            <Metric icon={BarChart3} label="Doanh thu đã thu" value={formatMoney(stats?.revenue || 0)} />
-            <Metric icon={UsersRound} label="Bệnh nhân" value={stats?.patientCount || 0} />
-            <Metric icon={ShieldCheck} label="Vắng mặt" value={stats?.noShowCount || 0} />
-            <Metric icon={Settings2} label="Đánh giá TB" value={Number(stats?.review?.average || 0).toFixed(1)} />
-          </section>
-
-          <section className="panel">
-            <div className="section-title">
-              <BarChart3 size={20} />
-              <h2>Bộ lọc báo cáo</h2>
-            </div>
-            <div className="form-grid">
-              <label className="field">
-                <span>Từ ngày</span>
-                <input type="date" value={reportFilters.startDate} onChange={(event) => setReportFilters({ ...reportFilters, startDate: event.target.value })} />
-              </label>
-              <label className="field">
-                <span>Đến ngày</span>
-                <input type="date" value={reportFilters.endDate} onChange={(event) => setReportFilters({ ...reportFilters, endDate: event.target.value })} />
-              </label>
-              <button className="button primary" type="button" onClick={loadRevenueReport}>
-                Xem doanh thu
-              </button>
-              <button className="button secondary" type="button" onClick={loadPatientStatistics}>
-                Xem bệnh nhân
-              </button>
-            </div>
-          </section>
-
-          {(revenueReport || patientStatistics) && (
-            <section className="panel">
-              <div className="section-title">
-                <Download size={20} />
-                <h2>Kết quả báo cáo</h2>
-              </div>
-              <div className="metrics-grid compact-grid">
-                {revenueReport?.summary?.map((item) => (
-                  <Metric icon={BarChart3} label={`Hóa đơn ${item._id}`} value={`${formatMoney(item.total || 0)} / ${item.count}`} key={item._id} />
-                ))}
-                {patientStatistics && (
-                  <>
-                    <Metric icon={UsersRound} label="Bệnh nhân mới" value={patientStatistics.newPatients || 0} />
-                    <Metric icon={UsersRound} label="Bệnh nhân quay lại" value={patientStatistics.returningPatients || 0} />
-                  </>
-                )}
-              </div>
-              {patientStatistics?.serviceUsage?.length ? (
-                <div className="mini-list">
-                  {patientStatistics.serviceUsage.map((item) => (
-                    <div className="mini-row" key={item._id || item.serviceName}>
-                      <span>{item.serviceName || "Dịch vụ"}</span>
-                      <strong>{item.count}</strong>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-            </section>
-          )}
-
-          <section className="panel">
-            <div className="section-title">
-              <Download size={20} />
-              <h2>Xuất báo cáo</h2>
-            </div>
-            <div className="stack">
-              <p className="muted">Báo cáo gồm doanh thu, thống kê bệnh nhân, đánh giá, vắng mặt và tổng lịch hẹn.</p>
-              <button className="button primary" onClick={exportReport}>
-                <Download size={18} />
-                Tải báo cáo JSON
-              </button>
-              {report && (
-                <div className="table-wrap">
-                  <table>
-                    <tbody>
-                      <tr>
-                        <th>Thời điểm</th>
-                        <td>{formatDateTime(report.generatedAt)}</td>
-                      </tr>
-                      <tr>
-                        <th>Tổng lịch hẹn</th>
-                        <td>{report.appointments}</td>
-                      </tr>
-                      <tr>
-                        <th>Vắng mặt</th>
-                        <td>{report.noShowCount}</td>
-                      </tr>
-                      <tr>
-                        <th>Đánh giá</th>
-                        <td>
-                          {Number(report.reviewSummary?.average || 0).toFixed(1)} ({report.reviewSummary?.count || 0} lượt)
-                        </td>
-                      </tr>
-                      <tr>
-                        <th>Hóa đơn</th>
-                        <td>{summarizeInvoices(report.invoiceSummary)}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          </section>
-        </>
+        <AdminReportPanel
+          onExportReport={exportReport}
+          onLoadPatientStatistics={loadPatientStatistics}
+          onLoadRevenueReport={loadRevenueReport}
+          onReportFiltersChange={(next) => setReportFilters((current) => ({ ...current, ...next }))}
+          patientStatistics={patientStatistics}
+          report={report}
+          reportFilters={reportFilters}
+          revenueReport={revenueReport}
+          stats={stats}
+        />
       )}
 
-      {activeFeature === "reviews" && (
-        <section className="panel">
-          <div className="section-title">
-            <Star size={20} />
-            <h2>Đánh giá & xếp hạng</h2>
-          </div>
-          {loading ? (
-            <EmptyState title="Đang tải đánh giá" text="Hệ thống đang lấy dữ liệu mới nhất." />
-          ) : reviews.length ? (
-            <div className="review-admin-grid">
-              {reviews.map((review) => (
-                <article className="patient-dark-review-card admin-review-card" key={review._id}>
-                  <div className="review-stars">
-                    {Array.from({ length: Number(review.rating || review.ratingService || 5) }, (_, index) => <Star fill="currentColor" size={15} key={index} />)}
-                  </div>
-                  <p>{review.comment || "Không có nhận xét chi tiết."}</p>
-                  <div>
-                    <strong>{review.patient?.fullName || "Bệnh nhân"}</strong>
-                    <span>{review.service?.name || "Dịch vụ"} / {review.dentist?.fullName || "Bác sĩ"}</span>
-                  </div>
-                </article>
-              ))}
-            </div>
-          ) : (
-            <EmptyState title="Chưa có đánh giá" text="Khi bệnh nhân gửi đánh giá, dữ liệu sẽ hiển thị tại đây." />
-          )}
-        </section>
-      )}
+      {activeFeature === "reviews" && <AdminReviewList loading={loading} reviews={reviews} />}
     </div>
-  );
-}
-
-function Metric({ icon: Icon, label, value }) {
-  return (
-    <article className="metric-card">
-      <Icon size={22} />
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </article>
   );
 }
 
@@ -1082,37 +496,6 @@ function validateTimeRange(startTime, endTime) {
     return "Thời gian phải nằm trong ca sáng 08:00 - 11:30 hoặc ca chiều 14:00 - 17:30.";
   }
   return "";
-}
-
-function formatDate(value) {
-  if (!value) return "-";
-  return new Date(value).toLocaleDateString("vi-VN");
-}
-
-function summarizeInvoices(items = []) {
-  if (!items.length) return "Chưa có hóa đơn";
-  return items.map((item) => `${item._id}: ${formatMoney(item.total)} (${item.count})`).join(", ");
-}
-
-function formatProfileCollection(value) {
-  const labels = {
-    patients: "Bệnh nhân",
-    receptionists: "Lễ tân",
-    dentists: "Bác sĩ",
-    nurses: "Y tá",
-    adminprofiles: "Quản trị viên"
-  };
-  return labels[value] || value || "-";
-}
-
-function formatTimeSlotName(value) {
-  const labels = {
-    Morning: "Ca sáng",
-    Afternoon: "Ca chiều",
-    "Morning Shift": "Ca sáng",
-    "Afternoon Shift": "Ca chiều"
-  };
-  return labels[value] || value;
 }
 
 function downloadJson(payload, filename) {

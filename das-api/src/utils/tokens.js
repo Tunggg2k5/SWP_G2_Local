@@ -1,7 +1,8 @@
 import jwt from "jsonwebtoken";
+import { env } from "../config/environment.js";
 
 export function getJwtSecret() {
-  return process.env.JWT_SECRET || "das-local-development-secret";
+  return env.JWT_SECRET;
 }
 
 export function signToken(user) {
@@ -12,6 +13,6 @@ export function signToken(user) {
       email: user.email
     },
     getJwtSecret(),
-    { expiresIn: process.env.JWT_EXPIRES_IN || "7d" }
+    { expiresIn: env.JWT_EXPIRES_IN }
   );
 }

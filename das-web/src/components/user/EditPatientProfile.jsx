@@ -4,7 +4,7 @@ const genderOptions = [
   { value: "unknown", label: "Chưa chọn" },
   { value: "male", label: "Nam" },
   { value: "female", label: "Nữ" },
-  { value: "other", label: "Other" }
+  { value: "other", label: "Khac" }
 ];
 
 export default function EditPatientProfile({ form, onCancel, onChange, onSubmit }) {

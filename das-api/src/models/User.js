@@ -20,7 +20,6 @@ const userSchema = new mongoose.Schema(
       default: "active"
     },
     avatar: { type: String, trim: true },
-    specialty: { type: String, trim: true },
     bio: { type: String, trim: true },
     gender: {
       type: String,
@@ -30,7 +29,9 @@ const userSchema = new mongoose.Schema(
     address: { type: String, trim: true },
     yearsOfExperience: { type: Number, default: 0 },
     licenseNo: { type: String, trim: true },
-    avatarUrl: { type: String, trim: true }
+    avatarUrl: { type: String, trim: true },
+    resetPasswordCodeHash: { type: String, select: false },
+    resetPasswordExpiresAt: { type: Date, select: false }
   },
   { timestamps: true }
 );

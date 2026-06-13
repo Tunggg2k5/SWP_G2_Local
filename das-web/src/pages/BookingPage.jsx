@@ -1,11 +1,11 @@
-import { CalendarSearch, Clock, Stethoscope } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Feedback from "../components/Feedback.jsx";
+import AppointmentBookingForm from "../components/patient/AppointmentBookingForm.jsx";
 import { useAuth } from "../redux/AuthContext.jsx";
 import { usePublicBootstrap } from "../utils/usePublicBootstrap.js";
 import { api, getErrorMessage } from "../utils/api.js";
-import { formatMoney, todayInput } from "../utils/format.js";
+import { todayInput } from "../utils/format.js";
 import { canUsePatientBooking } from "../utils/roles.js";
 import { firstError, requireValue, validateDate, validateNote } from "../utils/validation.js";
 
@@ -110,99 +110,34 @@ export default function BookingPage({ embedded = false }) {
   }
 
   const selectedService = services.find((service) => service._id === serviceId);
+  const updateForm = (next) => {
+    if (Object.prototype.hasOwnProperty.call(next, "serviceId")) setServiceId(next.serviceId);
+    if (Object.prototype.hasOwnProperty.call(next, "date")) setDate(next.date);
+    if (Object.prototype.hasOwnProperty.call(next, "dentistId")) setDentistId(next.dentistId);
+    if (Object.prototype.hasOwnProperty.call(next, "time")) setTime(next.time);
+    if (Object.prototype.hasOwnProperty.call(next, "note")) setNote(next.note);
+  };
 
   return (
     <div className={embedded ? "booking-page embedded-booking" : "page-grid booking-page"}>
       <Feedback error={error} message={message} onClear={() => { setError(""); setMessage(""); }} />
-
-      <section className="panel patient-booking-panel">
-        <div className="booking-form-heading">
-          <CalendarSearch size={24} />
-          <div>
-            <h2>Đặt lịch khám</h2>
-            <p>Miễn phí chụp phim, tư vấn và thăm khám khi khách hàng đặt lịch hẹn trước.</p>
-          </div>
-        </div>
-
-        <form className="booking-form-modern" onSubmit={book}>
-          <label className="field">
-            <span>Họ và tên</span>
-            <input value={user?.fullName || ""} disabled />
-          </label>
-
-          <label className="field">
-            <span>Số điện thoại</span>
-            <input value={user?.phone || ""} disabled />
-          </label>
-
-          <label className="field">
-            <span>Dịch vụ quan tâm</span>
-            <select value={serviceId} onChange={(e) => setServiceId(e.target.value)} disabled={bootstrapLoading} required>
-              {services.map((service) => (
-                <option value={service._id} key={service._id}>
-                  {service.name}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="field">
-            <span>Bác sĩ</span>
-            <select value={dentistId} onChange={(e) => setDentistId(e.target.value)} disabled={bootstrapLoading} required>
-              <option value="random">Bác sĩ ngẫu nhiên</option>
-              {dentistOptions.map((dentist) => (
-                <option value={dentist._id} key={dentist._id}>
-                  {dentist.fullName}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="field">
-            <span>Ngày khám</span>
-            <input type="date" value={date} min={minDate} onChange={(e) => setDate(e.target.value)} required />
-          </label>
-
-          <fieldset className="booking-time-field">
-            <legend>Giờ khám</legend>
-            <div className="booking-time-options">
-              {bookingSlotOptions.map((option) => (
-                <label key={option.value}>
-                  <input type="radio" name="booking-time" value={option.value} checked={time === option.value} onChange={(e) => setTime(e.target.value)} />
-                  <span>{option.label}</span>
-                </label>
-              ))}
-            </div>
-          </fieldset>
-
-          <label className="field wide">
-            <span>Ghi chú</span>
-            <input
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="Triệu chứng hoặc yêu cầu thêm"
-              maxLength={1000}
-            />
-          </label>
-
-          {selectedService && (
-            <div className="booking-summary-strip">
-              <span>
-                <Stethoscope size={16} />
-                {selectedService.name}
-              </span>
-              <span>
-                <Clock size={16} />
-                {selectedService.requiresPrepayment ? `Thanh toán khi đến khám: ${formatMoney(selectedService.price)}` : "Chi phí xác định sau khám"}
-              </span>
-            </div>
-          )}
-
-          <button className="button primary booking-submit-final" disabled={submitting || bootstrapLoading}>
-            {submitting ? "Đang gửi..." : "Đặt lịch"}
-          </button>
-        </form>
-      </section>
+      <AppointmentBookingForm
+        bootstrapLoading={bootstrapLoading}
+        date={date}
+        dentistId={dentistId}
+        dentistOptions={dentistOptions}
+        embedded={embedded}
+        minDate={minDate}
+        note={note}
+        onChange={updateForm}
+        onSubmit={book}
+        selectedService={selectedService}
+        serviceId={serviceId}
+        services={services}
+        submitting={submitting}
+        time={time}
+        user={user}
+      />
     </div>
   );
 }

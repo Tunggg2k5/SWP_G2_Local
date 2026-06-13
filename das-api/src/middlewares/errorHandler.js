@@ -27,10 +27,6 @@ export function errorHandler(err, _req, res, _next) {
     details = { path: err.path };
   }
 
-  if (statusCode === 500) {
-    console.error(err);
-  }
-
   res.status(statusCode).json({
     message,
     details: details || undefined
